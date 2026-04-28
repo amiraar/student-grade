@@ -10,6 +10,7 @@
   .card{background:var(--surface);border:0.5px solid var(--border);border-radius:var(--rad);padding:1.25rem}
   .card+.card{margin-top:1rem}
   .section-label{font-size:11px;font-weight:500;letter-spacing:1px;text-transform:uppercase;color:var(--ink3);margin-bottom:10px}
+  .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
   .tabs{display:flex;gap:6px;margin-bottom:1rem}
   .tab{flex:1;padding:8px;font-size:13px;font-family:var(--sans);font-weight:500;border:0.5px solid var(--border);background:var(--surface2);border-radius:var(--rad);cursor:pointer;color:var(--ink2);transition:all .15s}
   .tab.active{background:var(--ink);color:#fff;border-color:var(--ink)}
@@ -44,7 +45,10 @@
   .key-row label{font-size:12px;color:var(--ink2);width:36px;font-family:var(--mono)}
   .key-row input{flex:1;padding:4px 8px;font-size:12px;font-family:var(--mono);border:0.5px solid var(--border);border-radius:6px;background:var(--surface);color:var(--ink);text-transform:uppercase}
   .key-row input:focus{outline:none;border-color:var(--accent)}
-  .add-row-btn{font-size:12px;color:var(--accent);background:none;border:none;cursor:pointer;font-family:var(--sans);padding:4px 0}
+  .row-actions{display:flex;gap:8px;margin-top:6px}
+  .add-row-btn,.remove-row-btn{font-size:12px;border:0.5px solid var(--border);cursor:pointer;font-family:var(--sans);padding:6px 12px;border-radius:999px;background:var(--surface2);color:var(--ink2)}
+  .add-row-btn{border-color:var(--accent);color:var(--accent)}
+  .remove-row-btn{color:var(--err);border-color:var(--err2)}
   #grade-btn{width:100%;padding:12px;font-family:var(--sans);font-size:14px;font-weight:500;background:var(--accent);color:#fff;border:none;border-radius:var(--rad);cursor:pointer;margin-top:1rem;transition:opacity .15s}
   #grade-btn:disabled{opacity:.4;cursor:not-allowed}
   #result-area{display:none}
@@ -143,15 +147,24 @@
 
     <div id="section-pg">
       <div id="key-pg-rows"></div>
-      <button class="add-row-btn" onclick="addKeyRow('pg')">+ Tambah soal</button>
+      <div class="row-actions">
+        <button class="add-row-btn" onclick="addKeyRow('pg')">+ Tambah soal</button>
+        <button class="remove-row-btn" onclick="removeKeyRow('pg')">Hapus soal</button>
+      </div>
     </div>
     <div id="section-bs" style="display:none">
       <div id="key-bs-rows"></div>
-      <button class="add-row-btn" onclick="addKeyRow('bs')">+ Tambah soal</button>
+      <div class="row-actions">
+        <button class="add-row-btn" onclick="addKeyRow('bs')">+ Tambah soal</button>
+        <button class="remove-row-btn" onclick="removeKeyRow('bs')">Hapus soal</button>
+      </div>
     </div>
     <div id="section-mj" style="display:none">
       <div id="key-mj-rows"></div>
-      <button class="add-row-btn" onclick="addKeyRow('mj')">+ Tambah soal</button>
+      <div class="row-actions">
+        <button class="add-row-btn" onclick="addKeyRow('mj')">+ Tambah soal</button>
+        <button class="remove-row-btn" onclick="removeKeyRow('mj')">Hapus soal</button>
+      </div>
     </div>
   </div>
 
@@ -198,6 +211,13 @@ function addKeyRow(sec, num, val){
   div.className='key-row';
   div.innerHTML=`<label>${n}.</label><input type="text" maxlength="3" placeholder="${placeholder}" value="${val||''}">`;
   rows.appendChild(div);
+}
+
+function removeKeyRow(sec){
+  const rows = document.getElementById('key-'+sec+'-rows');
+  if(rows.children.length>0){
+    rows.removeChild(rows.lastElementChild);
+  }
 }
 
 function initDefaultKeys(){
