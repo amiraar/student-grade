@@ -13,6 +13,9 @@
     <div id="app">
       <h1>Koreksi Ujian</h1>
       <p class="sub">Scan lembar jawaban — nilai keluar otomatis</p>
+      <div class="name-row">
+        <input id="student-name" type="text" placeholder="Nama siswa (opsional)">
+      </div>
 
       <div class="card">
         <div class="section-label">Sumber Gambar</div>
@@ -93,6 +96,27 @@
         </div>
       </div>
 
+      <div class="card">
+        <details id="weight-settings" class="collapse">
+          <summary>Pengaturan Bobot Nilai</summary>
+          <div class="weight-grid">
+            <div class="weight-row">
+              <label for="weight-pg">Bobot PG</label>
+              <input id="weight-pg" type="number" min="0" max="100" step="1" value="60">
+            </div>
+            <div class="weight-row">
+              <label for="weight-bs">Bobot BS</label>
+              <input id="weight-bs" type="number" min="0" max="100" step="1" value="20">
+            </div>
+            <div class="weight-row">
+              <label for="weight-mj">Bobot MJ</label>
+              <input id="weight-mj" type="number" min="0" max="100" step="1" value="20">
+            </div>
+          </div>
+          <p class="inline-error" id="weight-error"></p>
+        </details>
+      </div>
+
       <button id="grade-btn" onclick="gradeExam()" disabled>Koreksi Sekarang</button>
 
       <div id="loading" class="card" style="display:none">
@@ -101,6 +125,7 @@
       </div>
 
       <div id="result-area" class="card" style="display:none"></div>
+      <div id="session-area" class="card" style="display:none"></div>
     </div>
 
     <script src="assets/js/app.js" defer></script>

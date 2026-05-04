@@ -5,6 +5,8 @@ let calibrationActive = false;
 let activeSection = 'pg';
 let keyRows = {pg:[],bs:[],mj:[]};
 let stream = null;
+let sessionResults = [];
+let lastResult = null;
 
 function switchTab(t){
   document.getElementById('pane-upload').style.display = t==='upload'?'block':'none';
@@ -28,8 +30,15 @@ function addKeyRow(sec, num, val){
   const placeholder=sec==='bs'?'B/S':sec==='mj'?'A-K':'A-D';
   const div = document.createElement('div');
   div.className='key-row';
-  div.innerHTML=`<label>${n}.</label><input type="text" maxlength="3" placeholder="${placeholder}" value="${val||''}">`;
+  div.innerHTML=`<label>${n}.</label><div class="key-input-wrap"><input type="text" maxlength="3" placeholder="${placeholder}" value="${val||''}"><span class="key-error"></span></div>`;
   rows.appendChild(div);
+  const input=div.querySelector('input');
+  input.addEventListener('input',()=>{
+    input.value=input.value.toUpperCase();
+    div.classList.remove('invalid');
+    const err=div.querySelector('.key-error');
+    if(err){err.textContent='';}
+  });
 }
 
 function removeKeyRow(sec){
@@ -43,6 +52,67 @@ function initDefaultKeys(){
   for(let i=1;i<=15;i++) addKeyRow('pg',i,'');
   for(let i=1;i<=5;i++) addKeyRow('bs',i,'');
   for(let i=1;i<=5;i++) addKeyRow('mj',i,'');
+}
+
+function validateKeysAndShowErrors(){
+  const rules={
+    pg:/^[ABCD]$/,
+    bs:/^[BS]$/,
+    mj:/^[A-K]$/
+  };
+  let valid=true;
+  ['pg','bs','mj'].forEach(sec=>{
+    const rows=[...document.getElementById('key-'+sec+'-rows').children];
+    rows.forEach((row,idx)=>{
+      const input=row.querySelector('input');
+      const err=row.querySelector('.key-error');
+      const raw=input.value.trim().toUpperCase();
+      input.value=raw;
+      if(!raw){
+        row.classList.remove('invalid');
+        if(err){err.textContent='';}
+        return;
+      }
+      if(!rules[sec].test(raw)){
+        valid=false;
+        row.classList.add('invalid');
+        if(err){err.textContent=`No. ${idx+1}: jawaban tidak valid`;}
+      }else{
+        row.classList.remove('invalid');
+        if(err){err.textContent='';}
+      }
+    });
+  });
+  return valid;
+}
+
+function getWeights(){
+  const pg=parseFloat(document.getElementById('weight-pg').value||'0');
+  const bs=parseFloat(document.getElementById('weight-bs').value||'0');
+  const mj=parseFloat(document.getElementById('weight-mj').value||'0');
+  return {pg,bs,mj};
+}
+
+function validateWeights(){
+  const err=document.getElementById('weight-error');
+  const w=getWeights();
+  const sum=w.pg+w.bs+w.mj;
+  if(!Number.isFinite(sum)||Math.round(sum)!==100){
+    err.textContent='Total bobot harus 100.';
+    return false;
+  }
+  err.textContent='';
+  return true;
+}
+
+function setupWeightInputs(){
+  ['weight-pg','weight-bs','weight-mj'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(!el)return;
+    el.addEventListener('input',()=>{
+      validateWeights();
+    });
+  });
 }
 
 function getKeys(){
@@ -98,6 +168,14 @@ function snapPhoto(){
 
 async function gradeExam(){
   if(!capturedImageDataUrl){alert('Pilih gambar terlebih dahulu');return;}
+  if(!validateKeysAndShowErrors()){
+    alert('Periksa kunci jawaban yang tidak valid');
+    return;
+  }
+  if(!validateWeights()){
+    alert('Periksa bobot nilai terlebih dahulu');
+    return;
+  }
   const keys=getKeys();
   const hasKey=Object.values(keys).some(arr=>arr.some(r=>r.answer));
   if(!hasKey){alert('Isi minimal satu kunci jawaban');return;}
@@ -160,25 +238,39 @@ async function runOmrFromDataUrl(dataUrl,keys){
   const result={pg:[],bs:[],mj:[],catatan:''};
   if(contrastNote){noteParts.push(contrastNote);}
 
+  const meta={doubleMarks:{pg:0,bs:0,mj:0},missingKey:{pg:0,bs:0,mj:0}};
   const labels={pg:'PG',bs:'BS',mj:'MJ'};
   ['pg','bs','mj'].forEach(sec=>{
     const secLayout=layout[sec];
-    const answers=analyzeSection(imageData,c.width,c.height,secLayout,radius,baseThreshold,gap,noteParts,labels[sec]);
-    result[sec]=answers.map((ans,i)=>({
-      no:i+1,
-      jawaban_siswa:ans,
-      benar:ans!=='-'&&ans===keys[sec][i].answer
-    }));
+    const analysis=analyzeSection(imageData,c.width,c.height,secLayout,radius,baseThreshold,gap,noteParts,labels[sec]);
+    meta.doubleMarks[sec]=analysis.doubleCount;
+    let missingKeyCount=0;
+    result[sec]=analysis.answers.map((ans,i)=>{
+      const keyEntry=keys[sec]&&keys[sec][i]&&keys[sec][i].answer?keys[sec][i].answer:'';
+      const keyMissing=ans!=='-'&&!keyEntry;
+      if(keyMissing){missingKeyCount++;}
+      return {
+        no:i+1,
+        jawaban_siswa:ans,
+        keyMissing
+      };
+    });
+    meta.missingKey[sec]=missingKeyCount;
+    if(missingKeyCount>0){
+      noteParts.push(`Bagian ${labels[sec]}: ${missingKeyCount} jawaban terdeteksi tanpa kunci, tidak dinilai`);
+    }
   });
 
   if(noteParts.length){
     result.catatan=noteParts.join(' | ');
   }
+  result.meta=meta;
   return result;
 }
 
 function analyzeSection(imageData,w,h,layout,radius,baseThreshold,gap,noteParts,label){
   const answers=[];
+  let doubleCount=0;
   const blocks=layout.blocks||[layout];
   blocks.forEach(block=>{
     const options=block.options||layout.options||[];
@@ -198,14 +290,22 @@ function analyzeSection(imageData,w,h,layout,radius,baseThreshold,gap,noteParts,
         answers.push('-');
         continue;
       }
-      answers.push(best.opt);
+      if(runner.fillScore>=best.fillScore*0.7){
+        answers.push('!!');
+        doubleCount++;
+      }else{
+        answers.push(best.opt);
+      }
     }
   });
   const emptyCount=answers.filter(a=>a==='-').length;
   if(emptyCount>0){
     noteParts.push(`Bagian ${label}: ${emptyCount} kosong/tidak terbaca`);
   }
-  return answers;
+  if(doubleCount>0){
+    noteParts.push(`Bagian ${label}: ${doubleCount} double mark`);
+  }
+  return {answers,doubleCount,emptyCount};
 }
 
 function sampleBubble(imageData,w,h,cx,cy,r){
@@ -284,6 +384,18 @@ function downloadTemplate(){
   const ctx=c.getContext('2d');
   ctx.fillStyle='#fff';
   ctx.fillRect(0,0,w,h);
+  ctx.fillStyle='#000';
+  const fiducials=[
+    {x:40,y:40},
+    {x:960,y:40},
+    {x:960,y:1374},
+    {x:40,y:1374}
+  ];
+  fiducials.forEach(p=>{
+    ctx.beginPath();
+    ctx.arc(p.x,p.y,12,0,Math.PI*2);
+    ctx.fill();
+  });
   ctx.fillStyle='#111';
   ctx.font='24px Arial';
   ctx.fillText('Template OMR - Koreksi Ujian',80,60);
@@ -344,6 +456,14 @@ async function autoCropDeskew(){
   const ctx=tmp.getContext('2d');
   ctx.drawImage(img,0,0);
   const imageData=ctx.getImageData(0,0,tmp.width,tmp.height);
+  const fiducials=detectFiducials(imageData,tmp.width,tmp.height);
+  if(fiducials){
+    calibrationPoints=fiducials;
+    await applyCalibration();
+    document.getElementById('detect-note').textContent='Fiducial terdeteksi';
+    return;
+  }
+  document.getElementById('detect-note').textContent='Fiducial tidak ditemukan, menggunakan auto-crop';
   const box=detectPaperBox(imageData,tmp.width,tmp.height);
   if(!box){
     document.getElementById('detect-note').textContent='Auto-crop gagal, coba kalibrasi manual';
@@ -427,6 +547,42 @@ async function applyCalibration(){
   const warped=warpPerspective(srcCanvas,calibrationPoints,dstSize.w,dstSize.h);
   capturedImageDataUrl=warped.toDataURL('image/jpeg',0.92);
   setPreviewImage(capturedImageDataUrl,'Kalibrasi diterapkan');
+}
+
+function detectFiducials(imageData,w,h){
+  const marginX=Math.round(w*0.1);
+  const marginY=Math.round(h*0.1);
+  const radius=Math.max(8,Math.round(Math.min(w,h)*0.012));
+  const step=Math.max(2,Math.round(radius/3));
+  const regions=[
+    {key:'tl',x0:0,y0:0,x1:marginX,y1:marginY},
+    {key:'tr',x0:w-marginX,y0:0,x1:w-1,y1:marginY},
+    {key:'br',x0:w-marginX,y0:h-marginY,x1:w-1,y1:h-1},
+    {key:'bl',x0:0,y0:h-marginY,x1:marginX,y1:h-1}
+  ];
+  const points={};
+  for(const region of regions){
+    let best={x:region.x0,y:region.y0,gray:255};
+    for(let y=region.y0;y<=region.y1;y+=step){
+      for(let x=region.x0;x<=region.x1;x+=step){
+        const idx=(y*w+x)*4;
+        const d=imageData.data;
+        const gray=d[idx]*0.299+d[idx+1]*0.587+d[idx+2]*0.114;
+        if(gray<best.gray){
+          best={x,y,gray};
+        }
+      }
+    }
+    const sample=sampleBubble(imageData,w,h,best.x,best.y,radius);
+    const contrast=Math.max(0,sample.ringAvg-sample.innerAvg);
+    const darkness=Math.max(0,200-sample.innerAvg);
+    const confidence=Math.min(1,contrast/80)*Math.min(1,darkness/120);
+    if(confidence<0.7){
+      return null;
+    }
+    points[region.key]={x:best.x,y:best.y};
+  }
+  return [points.tl,points.tr,points.br,points.bl];
 }
 
 function detectPaperBox(imageData,w,h){
@@ -593,6 +749,137 @@ function drawSectionTemplate(ctx,w,h,layout,title){
   });
 }
 
+function buildKeyMap(keys,sec){
+  const map={};
+  (keys[sec]||[]).forEach(k=>{
+    if(k.answer){map[k.num]=k.answer;}
+  });
+  return map;
+}
+
+function redistributeWeights(weights,totals){
+  const totalWeight=weights.pg+weights.bs+weights.mj;
+  const active=['pg','bs','mj'].filter(k=>totals[k]>0);
+  const activeSum=active.reduce((sum,k)=>sum+weights[k],0);
+  if(activeSum<=0){
+    return {pg:0,bs:0,mj:0};
+  }
+  const factor=totalWeight/activeSum;
+  return {
+    pg:totals.pg>0?weights.pg*factor:0,
+    bs:totals.bs>0?weights.bs*factor:0,
+    mj:totals.mj>0?weights.mj*factor:0
+  };
+}
+
+function csvEscape(val){
+  const str=String(val??'');
+  if(/[";\n]/.test(str)){
+    return `"${str.replace(/"/g,'""')}"`;
+  }
+  return str;
+}
+
+function buildCurrentCsv(data,keys,name,finalScore){
+  const rows=[];
+  rows.push(['Nama Siswa','Seksi','No Soal','Jawaban Siswa','Kunci','Status','Nilai Akhir']);
+  const sections=[
+    {key:'pg',label:'Pilihan Ganda',items:data.pg||[]},
+    {key:'bs',label:'Benar/Salah',items:data.bs||[]},
+    {key:'mj',label:'Menjodohkan',items:data.mj||[]}
+  ];
+  sections.forEach(sec=>{
+    const keyMap=buildKeyMap(keys,sec.key);
+    sec.items.forEach(item=>{
+      const keyAnswer=keyMap[item.no]||'';
+      let status='';
+      if(item.jawaban_siswa==='!!'){
+        status='Double Mark';
+      }else if(item.jawaban_siswa==='-'){
+        status='Tidak Terbaca';
+      }else if(!keyAnswer){
+        status='Tidak Terbaca';
+      }else{
+        status=item.jawaban_siswa===keyAnswer?'Benar':'Salah';
+      }
+      rows.push([
+        name||'',
+        sec.label,
+        item.no,
+        item.jawaban_siswa,
+        keyAnswer,
+        status,
+        finalScore
+      ]);
+    });
+  });
+  return rows.map(r=>r.map(csvEscape).join(';')).join('\n');
+}
+
+function downloadCsv(filename,csvText){
+  const blob=new Blob([csvText],{type:'text/csv;charset=utf-8;'});
+  const link=document.createElement('a');
+  link.href=URL.createObjectURL(blob);
+  link.download=filename;
+  link.click();
+  URL.revokeObjectURL(link.href);
+}
+
+function downloadCsvCurrent(){
+  if(!lastResult)return;
+  const csv=buildCurrentCsv(lastResult.data,lastResult.keys,lastResult.name,lastResult.finalScore);
+  downloadCsv('hasil_omr.csv',csv);
+}
+
+function renderSessionList(){
+  const area=document.getElementById('session-area');
+  if(!sessionResults.length){
+    area.style.display='none';
+    return;
+  }
+  let html=`
+    <div class="session-head">
+      <div class="session-title">Daftar Hasil Sesi Ini</div>
+      <div class="result-actions">
+        <button class="action-btn" onclick="downloadAllSessionsCsv()">Unduh Semua (CSV)</button>
+        <button class="action-btn" onclick="clearSessionList()">Hapus Sesi</button>
+      </div>
+    </div>
+    <table class="session-table">
+      <thead>
+        <tr><th>No</th><th>Nama</th><th>Nilai</th><th>Grade</th><th>Waktu</th></tr>
+      </thead>
+      <tbody>
+  `;
+  sessionResults.forEach((row,idx)=>{
+    html+=`<tr>
+      <td>${idx+1}</td>
+      <td>${row.nama}</td>
+      <td>${row.nilai}</td>
+      <td>${row.grade}</td>
+      <td>${row.waktu}</td>
+    </tr>`;
+  });
+  html+='</tbody></table>';
+  area.innerHTML=html;
+  area.style.display='block';
+}
+
+function downloadAllSessionsCsv(){
+  if(!sessionResults.length)return;
+  const rows=[['No','Nama','Nilai','Grade','Waktu']];
+  sessionResults.forEach((row,idx)=>{
+    rows.push([idx+1,row.nama,row.nilai,row.grade,row.waktu]);
+  });
+  const csv=rows.map(r=>r.map(csvEscape).join(';')).join('\n');
+  downloadCsv('hasil_sesi_omr.csv',csv);
+}
+
+function clearSessionList(){
+  sessionResults=[];
+  renderSessionList();
+}
+
 function showResult(data,keys){
   document.getElementById('loading').style.display='none';
   document.getElementById('grade-btn').style.display='block';
@@ -603,19 +890,39 @@ function showResult(data,keys){
     {key:'mj',label:'Menjodohkan',items:data.mj||[]}
   ];
 
-  let totalBenar=0,totalSoal=0;
+  const totals={pg:0,bs:0,mj:0};
+  const stats={pg:{correct:0,wrong:0,empty:0,double:0},bs:{correct:0,wrong:0,empty:0,double:0},mj:{correct:0,wrong:0,empty:0,double:0}};
+
   allSections.forEach(sec=>{
+    const keyMap=buildKeyMap(keys,sec.key);
     sec.items.forEach(item=>{
-      const kunci=keys[sec.key].find(k=>k.num===item.no);
-      if(kunci&&kunci.answer){
-        totalSoal++;
-        if(item.benar)totalBenar++;
+      const keyAnswer=keyMap[item.no];
+      if(!keyAnswer){
+        return;
+      }
+      totals[sec.key]++;
+      if(item.jawaban_siswa==='-'){
+        stats[sec.key].empty++;
+      }else if(item.jawaban_siswa==='!!'){
+        stats[sec.key].double++;
+      }else if(item.jawaban_siswa===keyAnswer){
+        stats[sec.key].correct++;
+      }else{
+        stats[sec.key].wrong++;
       }
     });
   });
 
-  const pct=totalSoal>0?Math.round((totalBenar/totalSoal)*100):0;
-  const nilai=Math.round(pct);
+  const weights=getWeights();
+  const effectiveWeights=redistributeWeights(weights,totals);
+  const finalScore=(
+    (totals.pg?stats.pg.correct/totals.pg:0)*effectiveWeights.pg+
+    (totals.bs?stats.bs.correct/totals.bs:0)*effectiveWeights.bs+
+    (totals.mj?stats.mj.correct/totals.mj:0)*effectiveWeights.mj
+  );
+  const nilai=Math.round(finalScore);
+  const totalBenar=stats.pg.correct+stats.bs.correct+stats.mj.correct;
+  const totalSoal=totals.pg+totals.bs+totals.mj;
   const grade=nilai>=90?'A':nilai>=80?'B':nilai>=70?'C':nilai>=60?'D':'E';
 
   let html=`
@@ -627,28 +934,56 @@ function showResult(data,keys){
           <p class="score-info" style="margin-top:4px">${totalBenar} benar dari ${totalSoal} soal</p>
         </div>
       </div>
-      <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
-      <span class="info-pill">${pct}% skor</span>
+      <div class="progress-bar"><div class="progress-fill" style="width:${Math.max(0,Math.min(100,nilai))}%"></div></div>
+      <span class="info-pill">${Math.max(0,Math.min(100,nilai))}% skor</span>
     </div>
   `;
 
   allSections.forEach(sec=>{
-    const filtered=sec.items.filter(item=>keys[sec.key].find(k=>k.num===item.no&&k.answer));
+    const keyMap=buildKeyMap(keys,sec.key);
+    const filtered=sec.items.filter(item=>keyMap[item.no]||item.keyMissing);
     if(!filtered.length)return;
-    const benar=filtered.filter(i=>i.benar).length;
+    const s=stats[sec.key];
     html+=`<div style="margin-bottom:14px">
-      <p style="font-size:12px;font-weight:500;color:var(--ink2);margin-bottom:6px">${sec.label} — ${benar}/${filtered.length}</p>
+      <p style="font-size:12px;font-weight:500;color:var(--ink2);margin-bottom:6px">${sec.label}</p>
+      <div class="section-summary">
+        <span class="summary-pill ok">${s.correct} benar</span>
+        <span class="summary-pill bad">${s.wrong} salah</span>
+        <span class="summary-pill muted">${s.empty} tidak terbaca</span>
+        <span class="summary-pill warn">${s.double} double-mark</span>
+      </div>
       <div class="answer-grid">`;
     filtered.forEach(item=>{
-      const kunci=keys[sec.key].find(k=>k.num===item.no);
-      const cls=item.jawaban_siswa==='-'?'empty':item.benar?'correct':'wrong';
+      const keyAnswer=keyMap[item.no]||'';
+      let cls='';
+      let detail='';
+      if(item.keyMissing){
+        cls='unscored';
+        detail=`${item.jawaban_siswa} (kunci kosong)`;
+      }else if(item.jawaban_siswa==='-'){
+        cls='empty';
+        detail='- (tidak terbaca)';
+      }else if(item.jawaban_siswa==='!!'){
+        cls='double';
+        detail='!! (double mark)';
+      }else if(item.jawaban_siswa===keyAnswer){
+        cls='correct';
+        detail=`${item.jawaban_siswa} ✓`;
+      }else{
+        cls='wrong';
+        detail=`${item.jawaban_siswa} ✗ (${keyAnswer})`;
+      }
       html+=`<div class="ans-item ${cls}">
         <span class="ans-num">No ${item.no}</span>
-        <span class="ans-detail">${item.jawaban_siswa} ${item.benar?'✓':'✗ ('+((kunci&&kunci.answer)||'?')+')' }</span>
+        <span class="ans-detail">${detail}</span>
       </div>`;
     });
     html+='</div></div>';
   });
+
+  html+=`<div class="result-actions">
+    <button class="action-btn primary" onclick="downloadCsvCurrent()">Unduh CSV</button>
+  </div>`;
 
   if(data.catatan){
     html+=`<p style="font-size:11px;color:var(--ink3);margin-top:8px;font-family:var(--mono)">Catatan: ${data.catatan}</p>`;
@@ -658,6 +993,14 @@ function showResult(data,keys){
   area.innerHTML=html;
   area.style.display='block';
   area.scrollIntoView({behavior:'smooth',block:'start'});
+
+  const namaInput=document.getElementById('student-name');
+  const nama=namaInput?namaInput.value.trim():'-';
+  lastResult={data,keys,name:nama,finalScore:nilai};
+  const waktu=new Date().toLocaleString('id-ID',{hour12:false});
+  sessionResults.push({nama:nama||'-',nilai:nilai,grade,waktu});
+  renderSessionList();
 }
 
 initDefaultKeys();
+setupWeightInputs();
