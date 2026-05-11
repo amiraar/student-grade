@@ -228,6 +228,7 @@ async function runOmrFromDataUrl(dataUrl,keys){
   const ctx=c.getContext('2d');
   ctx.drawImage(img,0,0);
   const imageData=ctx.getImageData(0,0,c.width,c.height);
+  const blankBaseline=computeBlankBaseline(imageData,c.width,c.height);
   const contrastNote=checkContrast(imageData,c.width,c.height);
   const layout=getOmrLayout();
   const radius=Math.max(6,Math.round(Math.min(c.width,c.height)*0.008));
@@ -242,7 +243,7 @@ async function runOmrFromDataUrl(dataUrl,keys){
   const labels={pg:'PG',bs:'BS',mj:'MJ'};
   ['pg','bs','mj'].forEach(sec=>{
     const secLayout=layout[sec];
-    const analysis=analyzeSection(imageData,c.width,c.height,secLayout,radius,baseThreshold,gap,noteParts,labels[sec]);
+    const analysis=analyzeSection(imageData,c.width,c.height,secLayout,radius,baseThreshold,gap,noteParts,labels[sec],blankBaseline);
     meta.doubleMarks[sec]=analysis.doubleCount;
     let missingKeyCount=0;
     result[sec]=analysis.answers.map((ans,i)=>{
@@ -268,9 +269,10 @@ async function runOmrFromDataUrl(dataUrl,keys){
   return result;
 }
 
-function analyzeSection(imageData,w,h,layout,radius,baseThreshold,gap,noteParts,label){
+function analyzeSection(imageData,w,h,layout,radius,baseThreshold,gap,noteParts,label,blankBaseline){
   const answers=[];
   let doubleCount=0;
+  const adaptiveThreshold=Math.max(baseThreshold,blankBaseline.mean+blankBaseline.std*2.5);
   const blocks=layout.blocks||[layout];
   blocks.forEach(block=>{
     const options=block.options||layout.options||[];
@@ -281,8 +283,6 @@ function analyzeSection(imageData,w,h,layout,radius,baseThreshold,gap,noteParts,
         const sample=sampleBubble(imageData,w,h,x,y,radius);
         return {opt,fillScore:sample.fillScore};
       });
-      const rowStats=getStats(scores.map(s=>s.fillScore));
-      const adaptiveThreshold=Math.max(baseThreshold,rowStats.mean+rowStats.std*0.8);
       scores.sort((a,b)=>b.fillScore-a.fillScore);
       const best=scores[0];
       const runner=scores[1]||{fillScore:0};
@@ -290,7 +290,7 @@ function analyzeSection(imageData,w,h,layout,radius,baseThreshold,gap,noteParts,
         answers.push('-');
         continue;
       }
-      if(runner.fillScore>=best.fillScore*0.7){
+      if(runner.fillScore>=best.fillScore*0.82){
         answers.push('!!');
         doubleCount++;
       }else{
@@ -335,8 +335,32 @@ function sampleBubble(imageData,w,h,cx,cy,r){
   }
   const innerAvg=countInner?sumInner/countInner:255;
   const ringAvg=countRing?sumRing/countRing:255;
-  const fillScore=Math.max(0,ringAvg-innerAvg);
+  const darkScore=Math.max(0,220-innerAvg)/220;
+  const contrastScore=Math.max(0,ringAvg-innerAvg)/128;
+  const fillScore=darkScore*0.6+contrastScore*0.4;
   return {fillScore,innerAvg,ringAvg};
+}
+
+function computeBlankBaseline(imageData,w,h){
+  const radius=Math.max(6,Math.round(Math.min(w,h)*0.008));
+  const step=12;
+  const topMax=Math.max(0,Math.floor(h*0.08));
+  const bottomMin=Math.min(h-1,Math.floor(h*0.92));
+  const scores=[];
+  for(let y=0;y<=topMax;y+=step){
+    for(let x=0;x<w;x+=step){
+      scores.push(sampleBubble(imageData,w,h,x,y,radius).fillScore);
+    }
+  }
+  for(let y=bottomMin;y<h;y+=step){
+    for(let x=0;x<w;x+=step){
+      scores.push(sampleBubble(imageData,w,h,x,y,radius).fillScore);
+    }
+  }
+  if(!scores.length){
+    return {mean:0,std:0};
+  }
+  return getStats(scores);
 }
 
 function getStats(values){
@@ -539,14 +563,35 @@ function setPreviewImage(dataUrl,note){
 async function applyCalibration(){
   if(calibrationPoints.length!==4){return;}
   const img=await loadImage(capturedImageOriginalDataUrl);
+  const area=quadrilateralArea(calibrationPoints);
+  if(area<img.width*img.height*0.05){
+    document.getElementById('detect-note').textContent='Kalibrasi gagal: 4 titik terlalu dekat atau segaris.';
+    calibrationPoints=[];
+    return;
+  }
   const srcCanvas=document.createElement('canvas');
   srcCanvas.width=img.width;srcCanvas.height=img.height;
   const srcCtx=srcCanvas.getContext('2d');
   srcCtx.drawImage(img,0,0);
   const dstSize={w:1000,h:1414};
-  const warped=warpPerspective(srcCanvas,calibrationPoints,dstSize.w,dstSize.h);
-  capturedImageDataUrl=warped.toDataURL('image/jpeg',0.92);
-  setPreviewImage(capturedImageDataUrl,'Kalibrasi diterapkan');
+  try{
+    const warped=warpPerspective(srcCanvas,calibrationPoints,dstSize.w,dstSize.h);
+    capturedImageDataUrl=warped.toDataURL('image/jpeg',0.92);
+    setPreviewImage(capturedImageDataUrl,'Kalibrasi diterapkan');
+  }catch(err){
+    document.getElementById('detect-note').textContent=err.message;
+    calibrationPoints=[];
+  }
+}
+
+function quadrilateralArea(pts){
+  if(!pts||pts.length!==4){return 0;}
+  let sum=0;
+  for(let i=0;i<4;i++){
+    const j=(i+1)%4;
+    sum+=pts[i].x*pts[j].y-pts[j].x*pts[i].y;
+  }
+  return Math.abs(sum)/2;
 }
 
 function detectFiducials(imageData,w,h){
@@ -674,7 +719,10 @@ function gaussianSolve(A){
       if(Math.abs(A[k][i])>Math.abs(A[maxRow][i]))maxRow=k;
     }
     const tmp=A[i];A[i]=A[maxRow];A[maxRow]=tmp;
-    const pivot=A[i][i]||1e-10;
+    const pivot=A[i][i];
+    if(Math.abs(pivot)<1e-8){
+      throw new Error('Homography singular: titik kalibrasi tidak valid');
+    }
     for(let j=i;j<=n;j++){A[i][j]/=pivot;}
     for(let k=0;k<n;k++){
       if(k===i)continue;
@@ -911,6 +959,15 @@ function showResult(data,keys){
         stats[sec.key].wrong++;
       }
     });
+  });
+
+  allSections.forEach(sec=>{
+    const detectedCount=(data[sec.key]||[]).length;
+    const keyCount=(keys[sec.key]||[]).filter(k=>k.answer).length;
+    if(detectedCount>0&&keyCount>0&&detectedCount!==keyCount){
+      const note=`Bagian ${sec.label}: ${detectedCount} terdeteksi vs ${keyCount} kunci — periksa hasil`;
+      data.catatan=data.catatan?`${data.catatan} | ${note}`:note;
+    }
   });
 
   const weights=getWeights();
