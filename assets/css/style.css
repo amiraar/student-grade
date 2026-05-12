@@ -38,6 +38,7 @@ h1{font-size:22px;font-weight:600;letter-spacing:-0.5px;margin-bottom:4px}
 .calib-row{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;align-items:center}
 .calib-btn{padding:7px 12px;font-family:var(--sans);font-size:12px;font-weight:500;border:0.5px solid var(--border);background:var(--surface2);border-radius:999px;cursor:pointer;color:var(--ink2)}
 .calib-btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.calib-btn.debug.on{background:var(--ink);border-color:var(--ink);color:#fff}
 .calib-help{font-size:11px;color:var(--ink3)}
 #key-builder{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .key-section{background:var(--surface2);border-radius:var(--rad);padding:12px}
@@ -84,7 +85,7 @@ h1{font-size:22px;font-weight:600;letter-spacing:-0.5px;margin-bottom:4px}
 .stab{font-size:11px;padding:4px 10px;border:0.5px solid var(--border);border-radius:20px;background:var(--surface2);cursor:pointer;font-family:var(--sans);color:var(--ink2)}
 .stab.on{background:var(--ink);color:#fff;border-color:var(--ink)}
 .detected-note{font-size:11px;color:var(--accent);margin-top:4px;font-family:var(--mono)}
-canvas{display:none}
+#snap-canvas{display:none}
 .retry-btn{font-size:13px;color:var(--ink2);background:var(--surface2);border:0.5px solid var(--border);border-radius:var(--rad);padding:8px 16px;cursor:pointer;font-family:var(--sans);margin-top:8px}
 .info-pill{display:inline-flex;align-items:center;gap:4px;font-size:11px;padding:3px 10px;border-radius:20px;background:var(--accent2);color:var(--accent);font-family:var(--mono)}
 .collapse summary{cursor:pointer;font-size:13px;font-weight:600;color:var(--ink);list-style:none}

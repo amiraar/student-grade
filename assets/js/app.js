@@ -7,6 +7,7 @@ let keyRows = {pg:[],bs:[],mj:[]};
 let stream = null;
 let sessionResults = [];
 let lastResult = null;
+let debugOverlay = false;
 
 function switchTab(t){
   document.getElementById('pane-upload').style.display = t==='upload'?'block':'none';
@@ -427,9 +428,9 @@ function downloadTemplate(){
   ctx.fillText('Isi bulatan dengan pensil/pena hitam',80,84);
 
   const layout=getOmrLayout();
-  drawSectionTemplate(ctx,w,h,layout.pg,'Pilihan Ganda (A-E)');
+  drawSectionTemplate(ctx,w,h,layout.pg,'Pilihan Ganda (A-D)');
   drawSectionTemplate(ctx,w,h,layout.bs,'Benar / Salah (B/S)');
-  drawSectionTemplate(ctx,w,h,layout.mj,'Menjodohkan (A-E)');
+  drawSectionTemplate(ctx,w,h,layout.mj,'Menjodohkan (A-K)');
 
   const link=document.createElement('a');
   link.download='template_omr_koreksi_ujian.png';
@@ -470,6 +471,16 @@ function resetCalibration(){
   const canvas=document.getElementById('calibration-canvas');
   canvas.onclick=null;
   canvas.style.pointerEvents='none';
+}
+
+function toggleDebugOverlay(){
+  debugOverlay=!debugOverlay;
+  const btn=document.getElementById('debug-btn');
+  if(btn){
+    btn.textContent=debugOverlay?'Sembunyikan Grid OMR':'Tampilkan Grid OMR';
+    btn.classList.toggle('on',debugOverlay);
+  }
+  drawCalibrationOverlay();
 }
 
 async function autoCropDeskew(){
@@ -526,12 +537,17 @@ function drawCalibrationOverlay(){
   const canvas=document.getElementById('calibration-canvas');
   const ctx=canvas.getContext('2d');
   ctx.clearRect(0,0,canvas.width,canvas.height);
-  if(!calibrationPoints.length)return;
   const img=document.getElementById('preview-img');
   if(!img.naturalWidth||!img.naturalHeight)return;
   const rect=img.getBoundingClientRect();
   const scaleX=rect.width/img.naturalWidth;
   const scaleY=rect.height/img.naturalHeight;
+
+  if(debugOverlay){
+    drawOmrOverlay(ctx,img.naturalWidth,img.naturalHeight,scaleX,scaleY);
+  }
+
+  if(!calibrationPoints.length)return;
   ctx.strokeStyle='#1a6ef5';
   ctx.fillStyle='rgba(26,110,245,0.2)';
   ctx.lineWidth=2;
@@ -551,6 +567,31 @@ function drawCalibrationOverlay(){
     for(let i=1;i<pts.length;i++){ctx.lineTo(pts[i].x,pts[i].y);} 
     ctx.stroke();
   }
+}
+
+function drawOmrOverlay(ctx,imgW,imgH,scaleX,scaleY){
+  const layout=getOmrLayout();
+  const radius=Math.max(3,Math.round(Math.min(imgW,imgH)*0.004));
+  ctx.save();
+  ctx.strokeStyle='rgba(26,110,245,0.6)';
+  ctx.fillStyle='rgba(26,110,245,0.15)';
+  ctx.lineWidth=1;
+  ['pg','bs','mj'].forEach(sec=>{
+    const blocks=layout[sec].blocks||[layout[sec]];
+    blocks.forEach(block=>{
+      const options=block.options||layout[sec].options||[];
+      for(let i=0;i<block.count;i++){
+        const y=(block.startY*imgH+i*block.rowGap*imgH)*scaleY;
+        options.forEach((opt,idx)=>{
+          const x=(block.startX*imgW+idx*block.colGap*imgW)*scaleX;
+          ctx.beginPath();
+          ctx.arc(x,y,radius,0,Math.PI*2);
+          ctx.stroke();
+        });
+      }
+    });
+  });
+  ctx.restore();
 }
 
 function setPreviewImage(dataUrl,note){
