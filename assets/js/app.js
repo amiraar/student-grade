@@ -226,7 +226,7 @@ async function runOmrFromDataUrl(dataUrl,keys){
   const c=document.getElementById('snap-canvas');
   c.width=img.width;
   c.height=img.height;
-  const ctx=c.getContext('2d');
+  const ctx=c.getContext('2d',{willReadFrequently:true});
   ctx.drawImage(img,0,0);
   const imageData=ctx.getImageData(0,0,c.width,c.height);
   const blankBaseline=computeBlankBaseline(imageData,c.width,c.height);
@@ -488,7 +488,7 @@ async function autoCropDeskew(){
   const img=await loadImage(capturedImageOriginalDataUrl);
   const tmp=document.getElementById('snap-canvas');
   tmp.width=img.width;tmp.height=img.height;
-  const ctx=tmp.getContext('2d');
+  const ctx=tmp.getContext('2d',{willReadFrequently:true});
   ctx.drawImage(img,0,0);
   const imageData=ctx.getImageData(0,0,tmp.width,tmp.height);
   const fiducials=detectFiducials(imageData,tmp.width,tmp.height);
@@ -612,7 +612,7 @@ async function applyCalibration(){
   }
   const srcCanvas=document.createElement('canvas');
   srcCanvas.width=img.width;srcCanvas.height=img.height;
-  const srcCtx=srcCanvas.getContext('2d');
+  const srcCtx=srcCanvas.getContext('2d',{willReadFrequently:true});
   srcCtx.drawImage(img,0,0);
   const dstSize={w:1000,h:1414};
   try{
@@ -707,8 +707,8 @@ function detectPaperBox(imageData,w,h){
 function warpPerspective(srcCanvas,srcPts,dstW,dstH){
   const dstCanvas=document.createElement('canvas');
   dstCanvas.width=dstW;dstCanvas.height=dstH;
-  const dstCtx=dstCanvas.getContext('2d');
-  const srcCtx=srcCanvas.getContext('2d');
+  const dstCtx=dstCanvas.getContext('2d',{willReadFrequently:true});
+  const srcCtx=srcCanvas.getContext('2d',{willReadFrequently:true});
   const srcData=srcCtx.getImageData(0,0,srcCanvas.width,srcCanvas.height);
   const dstData=dstCtx.createImageData(dstW,dstH);
 
