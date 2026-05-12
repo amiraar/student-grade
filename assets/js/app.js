@@ -39,13 +39,13 @@ function getOmrLayout() {
     bs: {
       options: ['B','S'],
       blocks: [
-        { startX:0.13, startY:0.575, rowGap:0.052, colGap:0.10, count:5 }
+        { startX:0.13, startY:0.555, rowGap:0.050, colGap:0.10, count:5 }
       ]
     },
     mj: {
       options: ['A','B','C','D','E','F','G','H','I','J','K'],
       blocks: [
-        { startX:0.13, startY:0.735, rowGap:0.052, colGap:0.068, count:5 }
+        { startX:0.13, startY:0.80, rowGap:0.050, colGap:0.068, count:5 }
       ]
     }
   };
