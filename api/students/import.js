@@ -3,7 +3,7 @@ import { query } from '../../lib/db.js'
 import { decodeCsvInput, parseCsv } from '../../lib/csv.js'
 import { json, error } from '../../lib/response.js'
 
-export const config = { runtime: 'nodejs22.x' }
+export const config = { runtime: 'nodejs' }
 
 export default async function handler(req) {
   if (req.method !== 'POST') return error('Method not allowed', 405)

@@ -3,7 +3,7 @@ import { query } from '../../lib/db.js'
 import { json, error } from '../../lib/response.js'
 import { normalizeAnswerKey, validateExamPayload } from '../../lib/exam.js'
 
-export const config = { runtime: 'nodejs22.x' }
+export const config = { runtime: 'nodejs' }
 
 async function getExam(id, teacherId) {
   const rows = await query(

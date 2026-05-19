@@ -4,7 +4,7 @@ import { getPagination } from '../../lib/pagination.js'
 import { withPagination } from '../../lib/pagination-response.js'
 import { json, error } from '../../lib/response.js'
 
-export const config = { runtime: 'nodejs22.x' }
+export const config = { runtime: 'nodejs' }
 
 const sortable = new Set(['name', 'nis', 'created_at'])
 

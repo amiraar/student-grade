@@ -2,7 +2,7 @@ import { requireAuth } from '../../lib/middleware.js'
 import { query } from '../../lib/db.js'
 import { json, error } from '../../lib/response.js'
 
-export const config = { runtime: 'nodejs22.x' }
+export const config = { runtime: 'nodejs' }
 
 async function getClass(id, teacherId) {
   const rows = await query('SELECT * FROM classes WHERE id = $1 AND teacher_id = $2', [id, teacherId])

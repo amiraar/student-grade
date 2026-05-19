@@ -5,7 +5,7 @@ import { withPagination } from '../../lib/pagination-response.js'
 import { json, error } from '../../lib/response.js'
 import { normalizeAnswerKey, validateExamPayload } from '../../lib/exam.js'
 
-export const config = { runtime: 'nodejs22.x' }
+export const config = { runtime: 'nodejs' }
 
 const sortable = new Set(['title', 'subject', 'exam_date', 'created_at'])
 

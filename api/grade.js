@@ -5,7 +5,7 @@ import { normalizeAnswerKey, validateExamPayload } from '../lib/exam.js'
 import { query } from '../lib/db.js'
 import { json, error } from '../lib/response.js'
 
-export const config = { runtime: 'nodejs22.x' }
+export const config = { runtime: 'nodejs' }
 
 export default async function handler(req) {
   if (req.method !== 'POST') {

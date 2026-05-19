@@ -3,7 +3,7 @@ import { requireAuth } from '../../lib/middleware.js'
 import { json } from '../../lib/response.js'
 import { sanitizeTeacher } from '../../lib/auth-response.js'
 
-export const config = { runtime: 'nodejs22.x' }
+export const config = { runtime: 'nodejs' }
 
 export default async function handler(req) {
   if (req.method !== 'GET') {

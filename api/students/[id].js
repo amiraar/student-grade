@@ -2,7 +2,7 @@ import { requireAuth } from '../../lib/middleware.js'
 import { query } from '../../lib/db.js'
 import { json, error } from '../../lib/response.js'
 
-export const config = { runtime: 'nodejs22.x' }
+export const config = { runtime: 'nodejs' }
 
 async function getStudent(id, teacherId) {
   const rows = await query(
