@@ -1,39 +1,61 @@
-# Student Grade (OMR)
+# Student Grade (Full Stack)
 
-Simple web app to grade exam answer sheets using OMR directly in the browser. Supports photo upload or camera capture, auto-crop + deskew, and manual 4-point calibration.
+Aplikasi manajemen kelas, ujian, dan koreksi lembar jawaban otomatis berbasis Gemini Vision.
 
-## Features
-- Offline OMR in the browser (no API)
-- Auto-crop + deskew for tilted photos
-- Manual 4-point calibration
-- Downloadable OMR template
-- Low-contrast detection
+## Fitur Utama
+- Auth guru (login + registrasi)
+- Manajemen kelas, siswa, dan ujian
+- Koreksi lembar jawaban dengan Gemini Vision
+- Export CSV (hasil ujian, hasil siswa, laporan kelas)
+- Responsive dan siap deploy di Vercel
 
-## Usage
-1. Open `index.html` in a browser.
-2. Click **Download OMR Template** and print it.
-3. Fill the answer sheet based on the template format.
-4. Upload a photo or capture from camera.
-5. Run **Auto-crop + Deskew** or **4-Point Calibration**.
-6. Fill the answer key, then click **Grade Now**.
+## Struktur Proyek
+- frontend/ — Vue 3 + Vite + Pinia + Vue Router + Tailwind v4
+- api/ — Vercel Functions v3 (Node.js 22)
+- lib/ — utilitas backend
+- migrations/ — schema PostgreSQL
+- seed/ — data awal
 
-## Answer Sheet Format
-- Multiple Choice: 15 questions, options A-D (3 blocks x 5 questions)
-- True/False: 5 questions (B/S)
-- Matching: 5 questions, options A-K
+## Local Development
+1. Install dependencies frontend:
+	- `cd frontend`
+	- `npm install`
+2. Install dependencies backend:
+	- `npm install`
+3. Jalankan frontend:
+	- `npm run dev`
 
-## OMR Layout Tuning
-If bubbles do not align, adjust `getOmrLayout()` in `index.html`:
-- `startX`, `startY`: starting position (ratio to width/height)
-- `rowGap`, `colGap`: row/column spacing
-- `blocks`: split a section into multiple blocks
+## Environment Variables (Vercel)
+Tambahkan di Vercel Dashboard -> Project -> Settings -> Environment Variables:
+- `GEMINI_API_KEY`
+- `DATABASE_URL`
+- `JWT_SECRET` (min. 32 karakter)
+- `FRONTEND_URL`
 
-## Deploy to Vercel (Recommended)
-1. Push the repo to GitHub.
-2. Vercel: **New Project** -> **Import** the repo.
-3. Framework: **Other**. Leave Build Command and Output Directory empty.
-4. Deploy.
+Frontend (build-time):
+- `VITE_API_BASE_URL=/api`
 
-## Notes
-- Photos should be straight, full page visible, with even lighting.
-- If results are inaccurate, use 4-point calibration.
+## Neon Database Setup
+1. Buat project di Neon.
+2. Copy connection string ke `DATABASE_URL`.
+3. Jalankan file migrasi `migrations/001_initial.sql`.
+4. Jalankan seed `seed/001_seed.sql`.
+
+Seed akun guru:
+- Email: `guru@example.com`
+- Password: `password123`
+
+## Vercel Deployment
+1. Push repo ke GitHub.
+2. Import ke Vercel.
+3. Pastikan `vercel.json` digunakan (build command + output).
+4. Tambahkan environment variables.
+5. Deploy.
+
+## API Ringkas
+- Auth: `POST /api/auth/login`, `POST /api/auth/register`, `POST /api/auth/logout`, `GET /api/auth/me`
+- Grading: `POST /api/grade`
+- Exams: `GET /api/exams`, `POST /api/exams`, `GET /api/exams/:id`, `PUT /api/exams/:id`, `DELETE /api/exams/:id`
+- Students: `GET /api/students`, `POST /api/students`, `POST /api/students/import`, `GET /api/students/:id`, `PUT /api/students/:id`, `DELETE /api/students/:id`
+- Classes: `GET /api/classes`, `POST /api/classes`, `GET /api/classes/:id`, `PUT /api/classes/:id`, `DELETE /api/classes/:id`
+- Reports: `GET /api/reports/export`
