@@ -22,8 +22,11 @@ Aplikasi manajemen kelas, ujian, dan koreksi lembar jawaban otomatis berbasis Ge
 	- `npm install`
 2. Install dependencies backend:
 	- `npm install`
-3. Jalankan frontend:
+3. Jalankan API (Vercel Functions) di root:
+	- `vercel dev`
+4. Jalankan frontend (Vite) di folder frontend:
 	- `npm run dev`
+	- Dev server akan mem-proxy request `/api` ke `http://localhost:3000`
 
 ## Environment Variables (Vercel)
 Tambahkan di Vercel Dashboard -> Project -> Settings -> Environment Variables:
