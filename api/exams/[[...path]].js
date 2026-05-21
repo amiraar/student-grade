@@ -92,7 +92,12 @@ export default async function handler(req) {
     }
 
     if (req.method === 'POST') {
-      const body = await req.json()
+      let body
+      try {
+        body = await req.json()
+      } catch {
+        return error('Body request tidak valid', 400)
+      }
       const { class_id, title, subject, exam_date, answer_key, weights } = body || {}
       if (!class_id || !title || !subject || !exam_date || !answer_key || !weights) {
         return error('Data ujian tidak lengkap', 400)
@@ -226,7 +231,12 @@ export default async function handler(req) {
     const existing = await getExam(id, user.id)
     if (!existing) return error('Ujian tidak ditemukan', 404)
 
-    const body = await req.json()
+    let body
+    try {
+      body = await req.json()
+    } catch {
+      return error('Body request tidak valid', 400)
+    }
     const { title, subject, exam_date, answer_key, weights } = body || {}
 
     if (answer_key || weights) {

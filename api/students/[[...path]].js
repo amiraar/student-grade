@@ -88,7 +88,12 @@ export default async function handler(req) {
     }
 
     if (req.method === 'POST') {
-      const body = await req.json()
+      let body
+      try {
+        body = await req.json()
+      } catch {
+        return error('Body request tidak valid', 400)
+      }
       const { class_id, name, nis } = body || {}
       if (!class_id || !name || !nis) return error('class_id, nama, dan NIS wajib diisi', 400)
 
@@ -115,7 +120,12 @@ export default async function handler(req) {
   if (idSegment === 'import') {
     if (req.method !== 'POST') return error('Method not allowed', 405)
 
-    const body = await req.json()
+    let body
+    try {
+      body = await req.json()
+    } catch {
+      return error('Body request tidak valid', 400)
+    }
     const { class_id, csv } = body || {}
     if (!csv) return error('CSV wajib diisi', 400)
 
@@ -226,7 +236,12 @@ export default async function handler(req) {
     const data = await getStudent(id, user.id)
     if (!data) return error('Siswa tidak ditemukan', 404)
 
-    const body = await req.json()
+    let body
+    try {
+      body = await req.json()
+    } catch {
+      return error('Body request tidak valid', 400)
+    }
     const { name, nis, class_id } = body || {}
 
     let targetClassId = data.class_id

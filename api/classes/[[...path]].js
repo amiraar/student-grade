@@ -65,7 +65,12 @@ export default async function handler(req) {
     }
 
     if (req.method === 'POST') {
-      const body = await req.json()
+      let body
+      try {
+        body = await req.json()
+      } catch {
+        return error('Body request tidak valid', 400)
+      }
       const { name, academic_year, semester } = body || {}
       if (!name || !academic_year || !semester) {
         return error('Nama, tahun ajaran, dan semester wajib diisi', 400)
@@ -156,7 +161,12 @@ export default async function handler(req) {
   }
 
   if (req.method === 'PUT') {
-    const body = await req.json()
+    let body
+    try {
+      body = await req.json()
+    } catch {
+      return error('Body request tidak valid', 400)
+    }
     const { name, academic_year, semester } = body || {}
     const existing = await getClass(id, user.id)
     if (!existing) return error('Kelas tidak ditemukan', 404)
