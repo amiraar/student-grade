@@ -6,7 +6,7 @@ import { json, error } from '../../lib/response.js'
 import { normalizeAnswerKey, validateExamPayload } from '../../lib/exam.js'
 import { csvResponse } from '../../lib/csv.js'
 
-export const config = { runtime: 'nodejs' }
+export const config = { runtime: 'nodejs22.x' }
 
 const sortable = new Set(['title', 'subject', 'exam_date', 'created_at'])
 const resultsSortable = new Set(['score', 'graded_at'])

@@ -4,7 +4,7 @@ import { getPagination } from '../../lib/pagination.js'
 import { withPagination } from '../../lib/pagination-response.js'
 import { json, error } from '../../lib/response.js'
 
-export const config = { runtime: 'nodejs' }
+export const config = { runtime: 'nodejs22.x' }
 
 const sortable = new Set(['name', 'academic_year', 'semester', 'created_at'])
 

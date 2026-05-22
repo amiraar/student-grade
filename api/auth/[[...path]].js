@@ -6,7 +6,7 @@ import { json, error, corsHeaders } from '../../lib/response.js'
 import { sanitizeTeacher } from '../../lib/auth-response.js'
 import { rateLimit } from '../../lib/rate-limit.js'
 
-export const config = { runtime: 'nodejs' }
+export const config = { runtime: 'nodejs22.x' }
 
 export default async function handler(req) {
   if (req.method === 'OPTIONS') {
@@ -27,7 +27,7 @@ export default async function handler(req) {
   if (action === 'login') {
     if (req.method !== 'POST') return error('Method not allowed', 405)
 
-    const limitError = rateLimit(req, { key: 'auth:login', limit: 10, windowMs: 10 * 60 * 1000 })
+    const limitError = await rateLimit(req, { key: 'auth:login', limit: 10, windowMs: 10 * 60 * 1000 })
     if (limitError) return limitError
 
     let body
@@ -56,7 +56,7 @@ export default async function handler(req) {
   if (action === 'register') {
     if (req.method !== 'POST') return error('Method not allowed', 405)
 
-    const limitError = rateLimit(req, { key: 'auth:register', limit: 5, windowMs: 10 * 60 * 1000 })
+    const limitError = await rateLimit(req, { key: 'auth:register', limit: 5, windowMs: 10 * 60 * 1000 })
     if (limitError) return limitError
 
     let body

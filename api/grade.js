@@ -6,7 +6,7 @@ import { query } from '../lib/db.js'
 import { json, error } from '../lib/response.js'
 import { rateLimit } from '../lib/rate-limit.js'
 
-export const config = { runtime: 'nodejs' }
+export const config = { runtime: 'nodejs22.x' }
 
 export default async function handler(req) {
   if (req.method !== 'POST') {
@@ -16,7 +16,7 @@ export default async function handler(req) {
   const { error: authError, user } = await requireAuth(req)
   if (authError) return authError
 
-  const limitError = rateLimit(req, { key: 'grade', limit: 30, windowMs: 60 * 1000 })
+  const limitError = await rateLimit(req, { key: 'grade', limit: 30, windowMs: 60 * 1000 })
   if (limitError) return limitError
 
   let body

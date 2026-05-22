@@ -5,7 +5,7 @@ import { withPagination } from '../../lib/pagination-response.js'
 import { decodeCsvInput, parseCsv } from '../../lib/csv.js'
 import { json, error } from '../../lib/response.js'
 
-export const config = { runtime: 'nodejs' }
+export const config = { runtime: 'nodejs22.x' }
 
 const sortable = new Set(['name', 'nis', 'created_at'])
 
