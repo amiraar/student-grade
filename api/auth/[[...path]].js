@@ -18,7 +18,9 @@ export default async function handler(req) {
     })
   }
 
-  const { pathname } = new URL(req.url)
+  const proto = req.headers.get('x-forwarded-proto') || 'https'
+  const host = req.headers.get('x-forwarded-host') || req.headers.get('host') || 'localhost'
+  const { pathname } = new URL(req.url, `${proto}://${host}`)
   const action = pathname.split('/').filter(Boolean)[2]
 
   // POST /api/auth/login
