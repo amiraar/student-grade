@@ -6,8 +6,6 @@ import { query } from '../lib/db.js'
 import { json, error } from '../lib/response.js'
 import { rateLimit } from '../lib/rate-limit.js'
 
-export const config = { runtime: 'nodejs22.x' }
-
 export default async function handler(req) {
   if (req.method !== 'POST') {
     return error('Method not allowed', 405)
