@@ -49,10 +49,10 @@ onMounted(load)
         <RouterLink to="/exams" class="btn-ghost">Lihat semua</RouterLink>
       </div>
       <div class="mt-4 space-y-3">
-        <div v-for="exam in recentExams" :key="exam.id" class="rounded-2xl border border-slate-100 bg-white p-4">
+        <RouterLink v-for="exam in recentExams" :key="exam.id" :to="`/exams/${exam.id}`" class="block rounded-2xl border border-slate-100 bg-white p-4">
           <p class="font-semibold text-slate-900">{{ exam.title }}</p>
           <p class="text-sm text-slate-600">{{ exam.subject }} · {{ exam.exam_date }}</p>
-        </div>
+        </RouterLink>
         <p v-if="!recentExams.length" class="text-sm text-slate-500">Belum ada ujian.</p>
       </div>
     </section>

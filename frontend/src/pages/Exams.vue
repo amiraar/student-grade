@@ -1,12 +1,13 @@
 <script setup>
 import { onMounted, ref } from 'vue'
-import api from '../lib/api.js'
+import api, { errorMessage } from '../lib/api.js'
 
 const exams = ref([])
 const classes = ref([])
 const search = ref('')
 const subject = ref('')
 const classId = ref('')
+const message = ref({ type: '', text: '' })
 
 const form = ref({
   class_id: '',
@@ -66,7 +67,14 @@ const submit = async () => {
       mj: Number(form.value.weight_mj)
     }
   }
-  await api.post('/exams', payload)
+  try {
+    await api.post('/exams', payload)
+  } catch (err) {
+    message.value = { type: 'error', text: errorMessage(err, 'Gagal menyimpan ujian.') }
+    return
+  }
+  const counts = `PG ${payload.answer_key.pg.length}, B/S ${payload.answer_key.bs.length}, MJ ${payload.answer_key.mj.length} soal`
+  message.value = { type: 'success', text: `Ujian tersimpan (${counts}).` }
   form.value = { class_id: '', title: '', subject: '', exam_date: '', pg: '', bs: '', mj: '', weight_pg: 70, weight_bs: 20, weight_mj: 10 }
   await load()
 }
@@ -108,7 +116,7 @@ onMounted(load)
       </div>
 
       <div class="mt-4 grid gap-3 md:grid-cols-3">
-        <textarea v-model="form.pg" rows="4" class="input" placeholder="Kunci PG (contoh: A,B,C,D)"></textarea>
+        <textarea v-model="form.pg" rows="4" class="input" placeholder="Kunci PG A–E (contoh: A,B,C,D,E)"></textarea>
         <textarea v-model="form.bs" rows="4" class="input" placeholder="Kunci B/S (contoh: B,S,B)"></textarea>
         <textarea v-model="form.mj" rows="4" class="input" placeholder="Kunci Menjodohkan (contoh: A,B,C)"></textarea>
       </div>
@@ -117,7 +125,9 @@ onMounted(load)
         <input v-model="form.weight_bs" type="number" class="input" placeholder="Bobot B/S" />
         <input v-model="form.weight_mj" type="number" class="input" placeholder="Bobot Menjodohkan" />
       </div>
+      <p class="mt-2 text-xs text-slate-500">Total bobot harus 100. Bagian tanpa kunci tidak dihitung; bobotnya dibagi ke bagian lain.</p>
       <button class="btn mt-4" @click="submit">Simpan Ujian</button>
+      <p v-if="message.text" class="mt-2 text-sm" :class="message.type === 'error' ? 'text-red-600' : 'text-emerald-700'">{{ message.text }}</p>
     </section>
   </div>
 </template>

@@ -1,17 +1,21 @@
-import { requireAuth } from '../../lib/middleware.js'
-import { query } from '../../lib/db.js'
-import { getPagination } from '../../lib/pagination.js'
-import { withPagination } from '../../lib/pagination-response.js'
-import { json, error } from '../../lib/response.js'
-import { normalizeAnswerKey, validateExamPayload } from '../../lib/exam.js'
-import { csvResponse } from '../../lib/csv.js'
+import { requireAuth } from '../lib/middleware.js'
+import { query } from '../lib/db.js'
+import { getPagination } from '../lib/pagination.js'
+import { withPagination } from '../lib/pagination-response.js'
+import { json, error } from '../lib/response.js'
+import { normalizeAnswerKey, validateExamPayload } from '../lib/exam.js'
+import { csvResponse } from '../lib/csv.js'
+import { getSegments } from '../lib/route.js'
 
 const sortable = new Set(['title', 'subject', 'exam_date', 'created_at'])
 const resultsSortable = new Set(['score', 'graded_at'])
+// exam_date as 'YYYY-MM-DD' text; the driver would otherwise turn DATE into a full timestamp
+const examColumns = `e.id, e.class_id, e.title, e.subject, to_char(e.exam_date, 'YYYY-MM-DD') AS exam_date,
+  e.answer_key, e.weights, e.created_at, e.updated_at`
 
 async function getExam(id, teacherId) {
   const rows = await query(
-    `SELECT e.*
+    `SELECT ${examColumns}
      FROM exams e
      JOIN classes c ON c.id = e.class_id
      WHERE e.id = $1 AND c.teacher_id = $2`,
@@ -26,17 +30,12 @@ async function getExam(id, teacherId) {
   }
 }
 
-export default async function handler(req) {
+async function handler(req) {
   const { error: authError, user } = await requireAuth(req)
   if (authError) return authError
 
-  const proto = req.headers.get('x-forwarded-proto') || 'https'
-  const host = req.headers.get('x-forwarded-host') || req.headers.get('host') || 'localhost'
-  const url = new URL(req.url, `${proto}://${host}`)
-  const segments = url.pathname.split('/').filter(Boolean)
-  const idSegment = segments[2]
-  const sub = segments[3]
-  const sub2 = segments[4]
+  const { url, segments } = getSegments(req, 'exams')
+  const [idSegment, sub, sub2] = segments
 
   // /api/exams — list or create
   if (!idSegment) {
@@ -79,7 +78,7 @@ export default async function handler(req) {
 
       params.push(perPage, offset)
       const data = await query(
-        `SELECT e.*, c.name AS class_name
+        `SELECT ${examColumns}, c.name AS class_name
          FROM exams e
          JOIN classes c ON c.id = e.class_id
          ${where}
@@ -117,11 +116,11 @@ export default async function handler(req) {
       const rows = await query(
         `INSERT INTO exams (class_id, title, subject, exam_date, answer_key, weights)
          VALUES ($1, $2, $3, $4, $5, $6)
-         RETURNING *`,
+         RETURNING id`,
         [Number(class_id), title, subject, exam_date, JSON.stringify(normalizedKey), JSON.stringify(weights)]
       )
 
-      return json(rows[0], 201)
+      return json(await getExam(rows[0].id, user.id), 201)
     }
 
     return error('Method not allowed', 405)
@@ -250,11 +249,10 @@ export default async function handler(req) {
 
     const normalizedKey = answer_key ? normalizeAnswerKey(answer_key) : existing.answer_key
 
-    const rows = await query(
+    await query(
       `UPDATE exams
        SET title = $1, subject = $2, exam_date = $3, answer_key = $4, weights = $5, updated_at = NOW()
-       WHERE id = $6
-       RETURNING *`,
+       WHERE id = $6`,
       [
         title || existing.title,
         subject || existing.subject,
@@ -265,12 +263,7 @@ export default async function handler(req) {
       ]
     )
 
-    const updated = rows[0]
-    return json({
-      ...updated,
-      answer_key: typeof updated.answer_key === 'string' ? JSON.parse(updated.answer_key) : updated.answer_key,
-      weights: typeof updated.weights === 'string' ? JSON.parse(updated.weights) : updated.weights
-    })
+    return json(await getExam(id, user.id))
   }
 
   if (req.method === 'DELETE') {
@@ -282,3 +275,5 @@ export default async function handler(req) {
 
   return error('Method not allowed', 405)
 }
+
+export default { fetch: handler }

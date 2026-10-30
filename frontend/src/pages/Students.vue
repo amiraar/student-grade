@@ -1,6 +1,6 @@
 <script setup>
 import { onMounted, ref } from 'vue'
-import api from '../lib/api.js'
+import api, { errorMessage } from '../lib/api.js'
 
 const students = ref([])
 const classes = ref([])
@@ -11,6 +11,9 @@ const semester = ref('')
 const form = ref({ name: '', nis: '', class_id: '' })
 const importText = ref('')
 const importFile = ref(null)
+const importClassId = ref('')
+const message = ref({ type: '', text: '' })
+const importMessage = ref({ type: '', text: '' })
 
 const load = async () => {
   const [studentsRes, classesRes] = await Promise.all([
@@ -29,7 +32,13 @@ const load = async () => {
 }
 
 const submit = async () => {
-  await api.post('/students', form.value)
+  try {
+    await api.post('/students', form.value)
+  } catch (err) {
+    message.value = { type: 'error', text: errorMessage(err, 'Gagal menyimpan siswa.') }
+    return
+  }
+  message.value = { type: 'success', text: 'Siswa tersimpan.' }
   form.value = { name: '', nis: '', class_id: '' }
   await load()
 }
@@ -55,10 +64,16 @@ const importCsv = async () => {
   if (importFile.value) {
     csvPayload = await readFileBase64(importFile.value)
   }
-  await api.post('/students/import', {
-    class_id: classId.value || form.value.class_id || null,
-    csv: csvPayload
-  })
+  try {
+    const res = await api.post('/students/import', {
+      class_id: importClassId.value || null,
+      csv: csvPayload
+    })
+    importMessage.value = { type: 'success', text: res.data.message }
+  } catch (err) {
+    importMessage.value = { type: 'error', text: errorMessage(err, 'Gagal import CSV.') }
+    return
+  }
   importText.value = ''
   importFile.value = null
   await load()
@@ -106,15 +121,21 @@ onMounted(load)
         </select>
       </div>
       <button class="btn mt-4" @click="submit">Simpan</button>
+      <p v-if="message.text" class="mt-2 text-sm" :class="message.type === 'error' ? 'text-red-600' : 'text-emerald-700'">{{ message.text }}</p>
     </section>
 
     <section class="card p-6 md:p-8">
       <h2 class="text-xl font-semibold mb-4">Import CSV</h2>
-      <p class="text-sm text-slate-600 mb-3">Format: Nama;NIS (header opsional). Pilih kelas terlebih dahulu.</p>
+      <p class="text-sm text-slate-600 mb-3">Format per baris: Nama;NIS (header opsional). Siswa dengan NIS yang sudah ada dilewati.</p>
       <div class="grid gap-3">
+        <select v-model="importClassId" class="input">
+          <option value="">Pilih kelas tujuan</option>
+          <option v-for="item in classes" :key="item.id" :value="item.id">{{ item.name }}</option>
+        </select>
         <input type="file" accept=".csv" @change="handleFile" class="input" />
         <textarea v-model="importText" rows="4" placeholder="Tempel CSV di sini" class="input"></textarea>
         <button class="btn" @click="importCsv">Import</button>
+        <p v-if="importMessage.text" class="text-sm" :class="importMessage.type === 'error' ? 'text-red-600' : 'text-emerald-700'">{{ importMessage.text }}</p>
       </div>
     </section>
   </div>

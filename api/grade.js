@@ -1,12 +1,17 @@
 import { requireAuth } from '../lib/middleware.js'
 import { analyzeAnswerSheet } from '../lib/gemini.js'
 import { scoreAnswers } from '../lib/scoring.js'
-import { normalizeAnswerKey, validateExamPayload } from '../lib/exam.js'
+import { normalizeAnswerKey } from '../lib/exam.js'
 import { query } from '../lib/db.js'
 import { json, error } from '../lib/response.js'
 import { rateLimit } from '../lib/rate-limit.js'
 
-export default async function handler(req) {
+const parseJson = (value) => (typeof value === 'string' ? JSON.parse(value) : value)
+
+// POST /api/grade
+// - { exam_id, student_id, image }   -> AI reads the sheet, then scores it
+// - { exam_id, student_id, answers } -> teacher-entered/corrected answers, scored without AI
+async function handler(req) {
   if (req.method !== 'POST') {
     return error('Method not allowed', 405)
   }
@@ -23,15 +28,17 @@ export default async function handler(req) {
   } catch {
     return error('Body request tidak valid', 400)
   }
-  const { image, exam_id, answer_key, weights, student_id } = body || {}
+  const { image, answers: manualAnswers, exam_id, student_id } = body || {}
 
   const examId = Number(exam_id)
   const studentId = Number(student_id)
-  if (!image) return error('Image wajib diisi', 400)
   if (!examId || !studentId) return error('exam_id dan student_id wajib diisi', 400)
+  if (!image && (!manualAnswers || typeof manualAnswers !== 'object')) {
+    return error('Foto lembar jawaban atau jawaban manual wajib diisi', 400)
+  }
 
   const examRows = await query(
-    `SELECT e.id, e.class_id
+    `SELECT e.id, e.class_id, e.answer_key, e.weights
      FROM exams e
      JOIN classes c ON c.id = e.class_id
      WHERE e.id = $1 AND c.teacher_id = $2`,
@@ -44,39 +51,29 @@ export default async function handler(req) {
     `SELECT id FROM students WHERE id = $1 AND class_id = $2`,
     [studentId, exam.class_id]
   )
-  if (!studentRows.length) return error('Siswa tidak ditemukan', 404)
+  if (!studentRows.length) return error('Siswa tidak ditemukan di kelas ujian ini', 404)
 
-  const { keyErrors, weightError } = validateExamPayload(answer_key, weights)
-  if (keyErrors.length) return error(keyErrors.join(', '), 422)
-  if (weightError) return error(weightError, 422)
+  // Always grade against the answer key stored in the database
+  const answerKey = normalizeAnswerKey(parseJson(exam.answer_key))
+  const weights = parseJson(exam.weights)
 
-  const normalizedKey = normalizeAnswerKey(answer_key)
-
-  let answers
-  let layout
-  let sheetQuality
-  try {
-    const analysis = await analyzeAnswerSheet(image)
-    answers = analysis.answers
-    layout = analysis.layout
-    sheetQuality = analysis.sheetQuality
-  } catch (err) {
-    return error(err.message || 'Gagal membaca lembar jawaban', 422)
+  let answers = manualAnswers
+  let sheetQuality = 'manual'
+  if (image) {
+    const counts = {}
+    ;['pg', 'bs', 'mj'].forEach((sec) => {
+      counts[sec] = Math.max(0, ...answerKey[sec].filter((k) => k.answer).map((k) => k.no))
+    })
+    try {
+      const analysis = await analyzeAnswerSheet(image, counts)
+      answers = analysis.answers
+      sheetQuality = analysis.sheetQuality
+    } catch (err) {
+      return error(err.message || 'Gagal membaca lembar jawaban', 422)
+    }
   }
 
-  const { score, grade, detail } = scoreAnswers(answers, normalizedKey, weights)
-
-  const aiCounts = {
-    pg: layout.sections.pg.question_count,
-    bs: layout.sections.bs.question_count,
-    mj: layout.sections.mj.question_count
-  }
-  const keyCounts = {
-    pg: (normalizedKey.pg || []).filter((k) => k.answer).length,
-    bs: (normalizedKey.bs || []).filter((k) => k.answer).length,
-    mj: (normalizedKey.mj || []).filter((k) => k.answer).length
-  }
-  const countMismatch = ['pg', 'bs', 'mj'].some((s) => aiCounts[s] !== keyCounts[s])
+  const { score, grade, detail, items } = scoreAnswers(answers, answerKey, weights)
 
   const saved = await query(
     `INSERT INTO results (exam_id, student_id, answers, score, grade, detail, sheet_quality, graded_at)
@@ -92,10 +89,10 @@ export default async function handler(req) {
     score,
     grade,
     detail,
+    items,
     sheet_quality: sheetQuality,
-    ai_counts: aiCounts,
-    key_counts: keyCounts,
-    count_mismatch: countMismatch,
     result_id: saved[0]?.id ?? null
   })
 }
+
+export default { fetch: handler }

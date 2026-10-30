@@ -1,9 +1,10 @@
-import { requireAuth } from '../../lib/middleware.js'
-import { query } from '../../lib/db.js'
-import { getPagination } from '../../lib/pagination.js'
-import { withPagination } from '../../lib/pagination-response.js'
-import { decodeCsvInput, parseCsv } from '../../lib/csv.js'
-import { json, error } from '../../lib/response.js'
+import { requireAuth } from '../lib/middleware.js'
+import { query } from '../lib/db.js'
+import { getPagination } from '../lib/pagination.js'
+import { withPagination } from '../lib/pagination-response.js'
+import { decodeCsvInput, parseCsv } from '../lib/csv.js'
+import { json, error } from '../lib/response.js'
+import { getSegments } from '../lib/route.js'
 
 const sortable = new Set(['name', 'nis', 'created_at'])
 
@@ -18,16 +19,12 @@ async function getStudent(id, teacherId) {
   return rows[0]
 }
 
-export default async function handler(req) {
+async function handler(req) {
   const { error: authError, user } = await requireAuth(req)
   if (authError) return authError
 
-  const proto = req.headers.get('x-forwarded-proto') || 'https'
-  const host = req.headers.get('x-forwarded-host') || req.headers.get('host') || 'localhost'
-  const url = new URL(req.url, `${proto}://${host}`)
-  const segments = url.pathname.split('/').filter(Boolean)
-  const idSegment = segments[2]
-  const sub = segments[3]
+  const { url, segments } = getSegments(req, 'students')
+  const [idSegment, sub] = segments
 
   // /api/students — list or create
   if (!idSegment) {
@@ -103,12 +100,18 @@ export default async function handler(req) {
       ])
       if (!classes.length) return error('Kelas tidak ditemukan', 404)
 
-      const rows = await query(
-        `INSERT INTO students (class_id, name, nis)
-         VALUES ($1, $2, $3)
-         RETURNING *`,
-        [Number(class_id), name, nis]
-      )
+      let rows
+      try {
+        rows = await query(
+          `INSERT INTO students (class_id, name, nis)
+           VALUES ($1, $2, $3)
+           RETURNING *`,
+          [Number(class_id), name, nis]
+        )
+      } catch (err) {
+        if (err?.code === '23505') return error('NIS sudah terdaftar', 409)
+        throw err
+      }
 
       return json(rows[0], 201)
     }
@@ -161,16 +164,18 @@ export default async function handler(req) {
     for (const entry of entries) {
       if (!entry.name || !entry.nis || !entry.class_id) continue
       if (!allowed.has(Number(entry.class_id))) continue
-      await query(
+      const added = await query(
         `INSERT INTO students (class_id, name, nis)
          VALUES ($1, $2, $3)
-         ON CONFLICT (nis) DO NOTHING`,
+         ON CONFLICT (nis) DO NOTHING
+         RETURNING id`,
         [Number(entry.class_id), entry.name, entry.nis]
       )
-      inserted++
+      inserted += added.length
     }
 
-    return json({ message: 'Import selesai', inserted })
+    const skipped = entries.length - inserted
+    return json({ message: `Import selesai: ${inserted} siswa ditambahkan, ${skipped} dilewati`, inserted, skipped })
   }
 
   const id = Number(idSegment)
@@ -211,7 +216,7 @@ export default async function handler(req) {
 
     params.push(perPage, offset)
     const data = await query(
-      `SELECT r.*, e.title AS exam_title, e.subject, e.exam_date
+      `SELECT r.*, e.title AS exam_title, e.subject, to_char(e.exam_date, 'YYYY-MM-DD') AS exam_date
        FROM results r
        JOIN students s ON s.id = r.student_id
        JOIN exams e ON e.id = r.exam_id
@@ -274,3 +279,5 @@ export default async function handler(req) {
 
   return error('Method not allowed', 405)
 }
+
+export default { fetch: handler }

@@ -1,13 +1,14 @@
 <script setup>
 import { onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import api from '../lib/api.js'
+import api, { downloadFile, errorMessage } from '../lib/api.js'
 
 const route = useRoute()
 const examId = route.params.id
 const results = ref([])
 const search = ref('')
 const grade = ref('')
+const error = ref('')
 
 const load = async () => {
   const res = await api.get(`/exams/${examId}/results`, {
@@ -19,9 +20,24 @@ const load = async () => {
   results.value = res.data.data
 }
 
-const exportCsv = () => {
-  window.location.href = `/api/exams/${examId}/results/export`
+const exportCsv = async () => {
+  error.value = ''
+  try {
+    await downloadFile(`/exams/${examId}/results/export`, 'hasil-ujian.csv')
+  } catch (err) {
+    error.value = errorMessage(err, 'Gagal mengunduh CSV.')
+  }
 }
+
+const sectionText = (detail) =>
+  [['pg', 'PG'], ['bs', 'B/S'], ['mj', 'MJ']]
+    .map(([sec, label]) => {
+      const d = detail?.[sec]
+      const total = d ? d.correct + d.wrong + d.empty + d.double : 0
+      return total ? `${label} ${d.correct}/${total}` : null
+    })
+    .filter(Boolean)
+    .join(' · ')
 
 onMounted(load)
 </script>
@@ -33,6 +49,7 @@ onMounted(load)
         <h1 class="section-title">Hasil Ujian</h1>
         <button class="btn-ghost" @click="exportCsv">Unduh CSV</button>
       </div>
+      <p v-if="error" class="mt-2 text-sm text-red-600">{{ error }}</p>
       <div class="mt-4 grid gap-3 md:grid-cols-2">
         <input v-model="search" @input="load" placeholder="Cari siswa" class="input" />
         <select v-model="grade" @change="load" class="input">
@@ -47,7 +64,7 @@ onMounted(load)
       <div class="mt-6 space-y-3">
         <div v-for="result in results" :key="result.id" class="rounded-2xl border border-slate-100 bg-white p-4">
           <p class="font-semibold text-slate-900">{{ result.student_name }}</p>
-          <p class="text-sm text-slate-600">Nilai {{ result.score }} · Grade {{ result.grade }}</p>
+          <p class="text-sm text-slate-600">Nilai {{ Number(result.score) }} · Grade {{ result.grade }} · {{ sectionText(result.detail) }}</p>
         </div>
         <p v-if="!results.length" class="text-sm text-slate-500">Belum ada hasil.</p>
       </div>

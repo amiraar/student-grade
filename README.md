@@ -11,7 +11,7 @@ Aplikasi manajemen kelas, ujian, dan koreksi lembar jawaban otomatis berbasis Ge
 
 ## Struktur Proyek
 - frontend/ — Vue 3 + Vite + Pinia + Vue Router + Tailwind v4
-- api/ — Vercel Functions v3 (Node.js 22)
+- api/ — Vercel Functions (Node.js 22). Satu file per resource (`api/exams.js`, dst.); sub-path seperti `/api/exams/5/results` diarahkan ke file itu lewat `rewrites` di `vercel.json`
 - lib/ — utilitas backend
 - migrations/ — schema PostgreSQL
 - seed/ — data awal
@@ -31,6 +31,7 @@ Aplikasi manajemen kelas, ujian, dan koreksi lembar jawaban otomatis berbasis Ge
 ## Environment Variables (Vercel)
 Tambahkan di Vercel Dashboard -> Project -> Settings -> Environment Variables:
 - `GEMINI_API_KEY`
+- `GEMINI_MODEL` (opsional, default `gemini-2.0-flash`)
 - `DATABASE_URL`
 - `JWT_SECRET` (min. 32 karakter)
 - `FRONTEND_URL`
@@ -57,7 +58,7 @@ Seed akun guru:
 
 ## API Ringkas
 - Auth: `POST /api/auth/login`, `POST /api/auth/register`, `POST /api/auth/logout`, `GET /api/auth/me`
-- Grading: `POST /api/grade`
+- Grading: `POST /api/grade` — body `{ exam_id, student_id, image }` (dibaca AI) atau `{ exam_id, student_id, answers }` (jawaban manual / hasil koreksi guru)
 - Exams: `GET /api/exams`, `POST /api/exams`, `GET /api/exams/:id`, `PUT /api/exams/:id`, `DELETE /api/exams/:id`
 - Students: `GET /api/students`, `POST /api/students`, `POST /api/students/import`, `GET /api/students/:id`, `PUT /api/students/:id`, `DELETE /api/students/:id`
 - Classes: `GET /api/classes`, `POST /api/classes`, `GET /api/classes/:id`, `PUT /api/classes/:id`, `DELETE /api/classes/:id`

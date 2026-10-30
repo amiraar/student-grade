@@ -1,8 +1,9 @@
-import { requireAuth } from '../../lib/middleware.js'
-import { query } from '../../lib/db.js'
-import { getPagination } from '../../lib/pagination.js'
-import { withPagination } from '../../lib/pagination-response.js'
-import { json, error } from '../../lib/response.js'
+import { requireAuth } from '../lib/middleware.js'
+import { query } from '../lib/db.js'
+import { getPagination } from '../lib/pagination.js'
+import { withPagination } from '../lib/pagination-response.js'
+import { json, error } from '../lib/response.js'
+import { getSegments } from '../lib/route.js'
 
 const sortable = new Set(['name', 'academic_year', 'semester', 'created_at'])
 
@@ -11,16 +12,12 @@ async function getClass(id, teacherId) {
   return rows[0]
 }
 
-export default async function handler(req) {
+async function handler(req) {
   const { error: authError, user } = await requireAuth(req)
   if (authError) return authError
 
-  const proto = req.headers.get('x-forwarded-proto') || 'https'
-  const host = req.headers.get('x-forwarded-host') || req.headers.get('host') || 'localhost'
-  const url = new URL(req.url, `${proto}://${host}`)
-  const segments = url.pathname.split('/').filter(Boolean)
-  const idSegment = segments[2]
-  const sub = segments[3]
+  const { url, segments } = getSegments(req, 'classes')
+  const [idSegment, sub] = segments
 
   // /api/classes — list or create
   if (!idSegment) {
@@ -191,3 +188,5 @@ export default async function handler(req) {
 
   return error('Method not allowed', 405)
 }
+
+export default { fetch: handler }

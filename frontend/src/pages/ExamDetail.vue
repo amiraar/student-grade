@@ -1,12 +1,13 @@
 <script setup>
 import { onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import api from '../lib/api.js'
+import api, { errorMessage } from '../lib/api.js'
 
 const route = useRoute()
 const examId = route.params.id
 const exam = ref(null)
 const form = ref(null)
+const message = ref({ type: '', text: '' })
 
 const flattenAnswers = (section) => (section || []).map((item) => item.answer).join(', ')
 
@@ -55,8 +56,13 @@ const update = async () => {
       mj: Number(form.value.weight_mj)
     }
   }
-  const res = await api.put(`/exams/${examId}`, payload)
-  exam.value = res.data
+  try {
+    const res = await api.put(`/exams/${examId}`, payload)
+    exam.value = res.data
+    message.value = { type: 'success', text: 'Perubahan tersimpan. Nilai lama tidak berubah; koreksi ulang jika kunci diganti.' }
+  } catch (err) {
+    message.value = { type: 'error', text: errorMessage(err, 'Gagal menyimpan perubahan.') }
+  }
 }
 
 onMounted(load)
@@ -79,7 +85,7 @@ onMounted(load)
         <input v-model="form.exam_date" type="date" class="input" />
       </div>
       <div class="mt-4 grid gap-3 md:grid-cols-3">
-        <textarea v-model="form.pg" rows="4" class="input" placeholder="Kunci PG"></textarea>
+        <textarea v-model="form.pg" rows="4" class="input" placeholder="Kunci PG (A–E)"></textarea>
         <textarea v-model="form.bs" rows="4" class="input" placeholder="Kunci B/S"></textarea>
         <textarea v-model="form.mj" rows="4" class="input" placeholder="Kunci Menjodohkan"></textarea>
       </div>
@@ -89,6 +95,7 @@ onMounted(load)
         <input v-model="form.weight_mj" type="number" class="input" placeholder="Bobot Menjodohkan" />
       </div>
       <button class="btn mt-4" @click="update">Simpan Perubahan</button>
+      <p v-if="message.text" class="mt-2 text-sm" :class="message.type === 'error' ? 'text-red-600' : 'text-emerald-700'">{{ message.text }}</p>
     </section>
   </div>
 </template>
