@@ -47,7 +47,7 @@ function sheetPixel(x, y, marks, bits) {
 
 // corners = where the sheet's TL, TR, BR, BL corners land in the photo
 function photograph(student, examId, studentId, w, h, corners, light = 1) {
-  const bits = encodeId(examId, studentId)
+  const bits = encodeId(examId, studentId, counts)
   const toSheet = homography(corners, [[0, 0], [210, 0], [210, 297], [0, 297]])
   const gray = new Uint8Array(w * h)
   for (let py = 0; py < h; py++)
@@ -98,6 +98,13 @@ test('a printed ID that does not match its checksum is rejected', () => {
     for (let d = -6; d <= 6; d++) gray[Math.round(py + d) * 840 + Math.round(px)] = 0
   }
   assert.equal(readSheet(gray, 840, 1188, counts), null)
+})
+
+test('a sheet printed before the number of questions changed is rejected', () => {
+  const student = makeStudent()
+  const gray = photograph(student, 7, 205, 840, 1188, [[0, 0], [840, 0], [840, 1188], [0, 1188]])
+  assert.ok(readSheet(gray, 840, 1188, counts))
+  assert.equal(readSheet(gray, 840, 1188, { ...counts, pg: counts.pg + 5 }), null)
 })
 
 test('layout covers all options', () => {

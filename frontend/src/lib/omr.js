@@ -203,7 +203,7 @@ export function readSheet(gray, w, h, counts) {
       if (darkAt(m, ORIENTATION_MARK.x, ORIENTATION_MARK.y, ORIENTATION_MARK.size / 2.5, 22) < 0.4) continue
       if (MARKERS.some((mk) => darkAt(m, mk.x, mk.y, MARKER_SIZE / 3, mk.y < 100 ? mk.y + 8 : mk.y - 8) < 0.4)) continue
       const bits = idCells().map((cell) => (darkAt(m, cell.x, cell.y, ID_CELL.size / 3, cell.y - 4) > 0.4 ? 1 : 0))
-      const decoded = decodeId(bits)
+      const decoded = decodeId(bits, counts)
       if (!decoded) continue
       map = m
       id = decoded

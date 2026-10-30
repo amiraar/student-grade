@@ -112,7 +112,7 @@ async function handleFiles(event) {
           const data = await gradeWithAi(file)
           Object.assign(row, { status: 'ok', studentId: studentId.value, score: data.score, flagged: 0, source: 'AI' })
         } else {
-          row.status = 'gagal: lembar template tidak terdeteksi. Foto ulang: seluruh lembar & 4 kotak hitam terlihat.'
+          row.status = 'gagal: lembar template tidak terbaca. Foto ulang: seluruh lembar & 4 kotak hitam terlihat. Jika jumlah soal diubah setelah dicetak, cetak ulang lembarnya.'
         }
         continue
       }

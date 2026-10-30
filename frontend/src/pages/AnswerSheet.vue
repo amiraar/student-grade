@@ -9,7 +9,8 @@ const exam = ref(null)
 const students = ref([])
 const perStudent = ref(route.query.student === 'all')
 
-const layout = computed(() => (exam.value ? buildLayout(countsFromKey(exam.value.answer_key)) : null))
+const counts = computed(() => (exam.value ? countsFromKey(exam.value.answer_key) : null))
+const layout = computed(() => (counts.value ? buildLayout(counts.value) : null))
 // One page per student (name + ID printed), or one blank page to photocopy
 const pages = computed(() => (perStudent.value ? students.value : [null]))
 
@@ -67,7 +68,7 @@ onMounted(load)
 
       <div
         v-for="(cell, i) in idCells()"
-        v-show="encodeId(exam.id, student?.id ?? 0)[i]"
+        v-show="encodeId(exam.id, student?.id ?? 0, counts)[i]"
         :key="`id${i}`"
         class="ink"
         :style="square(cell.x, cell.y, ID_CELL.size)"

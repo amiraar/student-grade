@@ -34,7 +34,8 @@ const SECTION_TITLE_HEIGHT = 5
 const LETTER_ROW_HEIGHT = 4
 const SECTION_GAP = 3
 
-// Printed ID strip at the bottom: exam id (16 bit) + student id (16 bit) + check (8 bit)
+// Printed ID strip at the bottom: exam id (16 bit) + student id (16 bit) + check (8 bit).
+// The check also covers the question counts, so a sheet printed before the key changed is rejected.
 export const ID_CELL = { size: 2.6, pitch: 3.6, y: 283, left: 30 }
 const ID_BITS = 40
 
@@ -80,10 +81,11 @@ export function countsFromKey(answerKey) {
   return counts
 }
 
-const checksum = (examId, studentId) => (examId * 31 + studentId * 17 + 0x5a) & 0xff
+const checksum = (examId, studentId, counts) =>
+  (examId * 31 + studentId * 17 + (counts.pg || 0) * 7 + (counts.bs || 0) * 11 + (counts.mj || 0) * 13 + 0x5a) & 0xff
 
-export function encodeId(examId, studentId = 0) {
-  const value = [examId & 0xffff, studentId & 0xffff, checksum(examId & 0xffff, studentId & 0xffff)]
+export function encodeId(examId, studentId, counts) {
+  const value = [examId & 0xffff, studentId & 0xffff, checksum(examId & 0xffff, studentId & 0xffff, counts)]
   const bits = []
   ;[16, 16, 8].forEach((width, i) => {
     for (let b = width - 1; b >= 0; b--) bits.push((value[i] >> b) & 1)
@@ -92,12 +94,12 @@ export function encodeId(examId, studentId = 0) {
 }
 
 // Returns { examId, studentId } or null when the strip is unreadable
-export function decodeId(bits) {
+export function decodeId(bits, counts) {
   if (bits.length !== ID_BITS) return null
   const read = (from, width) => bits.slice(from, from + width).reduce((v, bit) => v * 2 + bit, 0)
   const examId = read(0, 16)
   const studentId = read(16, 16)
-  if (!examId || read(32, 8) !== checksum(examId, studentId)) return null
+  if (!examId || read(32, 8) !== checksum(examId, studentId, counts)) return null
   return { examId, studentId: studentId || null }
 }
 
