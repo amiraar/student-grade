@@ -1,5 +1,6 @@
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import ScoreRules from '../components/ScoreRules.vue'
 import api, { errorMessage } from '../lib/api.js'
 
 const exams = ref([])
@@ -19,7 +20,8 @@ const form = ref({
   mj: '',
   weight_pg: 70,
   weight_bs: 20,
-  weight_mj: 10
+  weight_mj: 10,
+  table: null
 })
 
 const load = async () => {
@@ -54,6 +56,12 @@ const buildAnswerKey = () => {
   }
 }
 
+const totalQuestions = computed(() => {
+  if (!form.value) return 0
+  const key = buildAnswerKey()
+  return key.pg.length + key.bs.length + key.mj.length
+})
+
 const submit = async () => {
   const payload = {
     class_id: form.value.class_id,
@@ -64,7 +72,8 @@ const submit = async () => {
     weights: {
       pg: Number(form.value.weight_pg),
       bs: Number(form.value.weight_bs),
-      mj: Number(form.value.weight_mj)
+      mj: Number(form.value.weight_mj),
+      ...(form.value.table ? { table: form.value.table.map(Number) } : {})
     }
   }
   try {
@@ -75,7 +84,7 @@ const submit = async () => {
   }
   const counts = `PG ${payload.answer_key.pg.length}, B/S ${payload.answer_key.bs.length}, MJ ${payload.answer_key.mj.length} soal`
   message.value = { type: 'success', text: `Ujian tersimpan (${counts}).` }
-  form.value = { class_id: '', title: '', subject: '', exam_date: '', pg: '', bs: '', mj: '', weight_pg: 70, weight_bs: 20, weight_mj: 10 }
+  form.value = { class_id: '', title: '', subject: '', exam_date: '', pg: '', bs: '', mj: '', weight_pg: 70, weight_bs: 20, weight_mj: 10, table: null }
   await load()
 }
 
@@ -129,21 +138,7 @@ onMounted(load)
           <textarea v-model="form.mj" rows="4" class="input" placeholder="Kunci Menjodohkan (contoh: A,B,C)"></textarea>
         </label>
       </div>
-      <div class="mt-4 grid gap-3 md:grid-cols-3">
-        <label class="block text-sm text-slate-600">
-          Bobot PG (%)
-          <input v-model="form.weight_pg" type="number" class="input" placeholder="Bobot PG" />
-        </label>
-        <label class="block text-sm text-slate-600">
-          Bobot B/S (%)
-          <input v-model="form.weight_bs" type="number" class="input" placeholder="Bobot B/S" />
-        </label>
-        <label class="block text-sm text-slate-600">
-          Bobot Menjodohkan (%)
-          <input v-model="form.weight_mj" type="number" class="input" placeholder="Bobot Menjodohkan" />
-        </label>
-      </div>
-      <p class="mt-2 text-xs text-slate-500">Total bobot harus 100. Bagian tanpa kunci tidak dihitung; bobotnya dibagi ke bagian lain.</p>
+      <ScoreRules :form="form" :total="totalQuestions" />
       <button class="btn mt-4" @click="submit">Simpan Ujian</button>
       <p v-if="message.text" class="mt-2 text-sm" :class="message.type === 'error' ? 'text-red-600' : 'text-emerald-700'">{{ message.text }}</p>
     </section>

@@ -3,6 +3,8 @@ import { computed, ref, watch, onMounted } from 'vue'
 import api, { errorMessage as getError } from '../lib/api.js'
 import { countsFromKey } from '../lib/sheet.js'
 import { fileToGray, readSheet } from '../lib/omr.js'
+// Same scoring code as the server, for the live score while typing
+import { scoreAnswers } from '../../../lib/scoring.js'
 
 const SECTIONS = { pg: 'Pilihan Ganda', bs: 'Benar/Salah', mj: 'Menjodohkan' }
 const SOURCE = { template: 'Lembar template (tanpa AI)', manual: 'Input manual', good: 'AI · foto baik', low_contrast: 'AI · kontras rendah', blurry: 'AI · buram', tilted: 'AI · miring' }
@@ -29,6 +31,10 @@ const review = ref(null) // { studentId, items, score, grade, source }
 
 const studentName = (id) => students.value.find((s) => s.id === id)?.name || `Siswa #${id}`
 const gradedCount = computed(() => students.value.filter((s) => results.value[s.id]).length)
+const reviewAnswers = (items) =>
+  Object.fromEntries(Object.keys(SECTIONS).map((sec) => [sec, items[sec].map((item) => ({ no: item.no, jawaban: String(item.answer || '-').trim().toUpperCase() || '-' }))]))
+const preview = computed(() => (review.value && exam.value ? scoreAnswers(reviewAnswers(review.value.items), exam.value.answer_key, exam.value.weights) : null))
+const totalQuestions = computed(() => (review.value ? Object.values(review.value.items).flat().length : 0))
 const flaggedCount = computed(() => (review.value ? Object.values(review.value.items).flat().filter((i) => i.ragu).length : 0))
 
 onMounted(async () => {
@@ -72,7 +78,7 @@ watch(studentId, (id) => {
   openReview(id, saved?.answers || {}, saved ? { score: Number(saved.score), grade: saved.grade, source: saved.sheet_quality } : {})
 })
 
-// Same comparison as the server (lib/scoring.js); only for showing colours
+// Editable answer table; colours and score come from `preview`
 function openReview(id, answers, extra) {
   const items = {}
   for (const sec of Object.keys(SECTIONS)) {
@@ -81,8 +87,7 @@ function openReview(id, answers, extra) {
       .map((k) => {
         const a = (answers[sec] || []).find((x) => Number(x.no) === Number(k.no))
         const answer = String(a?.jawaban ?? '-').trim().toUpperCase() || '-'
-        const status = answer === '-' ? 'empty' : answer === '!!' ? 'double' : answer === k.answer ? 'correct' : 'wrong'
-        return { no: Number(k.no), key: k.answer, answer, status, ragu: Boolean(a?.ragu) }
+        return { no: Number(k.no), key: k.answer, answer, ragu: Boolean(a?.ragu) }
       })
   }
   review.value = { studentId: id, items, score: null, grade: null, source: null, ...extra }
@@ -174,11 +179,8 @@ function showStudent(id) {
 
 async function saveReview() {
   const r = review.value
-  const answers = {}
-  for (const sec of Object.keys(SECTIONS)) {
-    // A teacher-checked answer is no longer "ragu"
-    answers[sec] = r.items[sec].map((item) => ({ no: item.no, jawaban: String(item.answer || '-').trim().toUpperCase() || '-' }))
-  }
+  // A teacher-checked answer is no longer "ragu"
+  const answers = reviewAnswers(r.items)
   busy.value = 'Menyimpan...'
   errorMessage.value = ''
   try {
@@ -189,6 +191,14 @@ async function saveReview() {
   } finally {
     busy.value = ''
   }
+}
+
+// Type a whole section at once, e.g. "ABCDA-B" or "A B C" ("-" empty, "!!" double)
+function quickFill(sec, text) {
+  const tokens = text.toUpperCase().match(/!!|[A-Z]|-/g) || []
+  review.value.items[sec].forEach((item, i) => {
+    if (i < tokens.length) item.answer = tokens[i]
+  })
 }
 
 function nextStudent() {
@@ -257,8 +267,10 @@ function nextStudent() {
       <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
           <h2 class="text-xl font-semibold">{{ studentName(review.studentId) }}</h2>
-          <p v-if="review.score !== null" class="text-2xl font-semibold">Nilai: {{ review.score }} ({{ review.grade }})</p>
-          <p v-else class="text-sm text-slate-600">Belum dinilai. Isi jawaban siswa lalu simpan.</p>
+          <p class="text-2xl font-semibold">Nilai: {{ preview.score }} ({{ preview.grade }})</p>
+          <p class="text-sm text-slate-600">Benar {{ preview.correct }} dari {{ totalQuestions }} soal</p>
+          <p v-if="review.score === null" class="text-sm text-amber-700">Belum disimpan. Isi jawaban siswa lalu klik Simpan.</p>
+          <p v-else-if="preview.score !== review.score" class="text-sm text-amber-700">Berubah dari {{ review.score }}, belum disimpan.</p>
           <p v-if="review.source" class="text-xs text-slate-500">Sumber: {{ SOURCE[review.source] || review.source }}</p>
           <p v-if="review.saved" class="text-sm text-emerald-700">Tersimpan.</p>
           <p v-if="flaggedCount" class="mt-1 text-sm text-amber-800">
@@ -275,8 +287,9 @@ function nextStudent() {
         <div v-for="(label, sec) in SECTIONS" :key="sec" v-show="review.items[sec]?.length">
           <h3 class="mb-2 font-semibold">
             {{ label }}
-            <span class="text-sm font-normal text-slate-500">({{ review.items[sec].filter((i) => i.status === 'correct').length }}/{{ review.items[sec].length }} benar)</span>
+            <span class="text-sm font-normal text-slate-500">({{ preview.detail[sec].correct }}/{{ review.items[sec].length }} benar)</span>
           </h3>
+          <input class="input mb-2" :placeholder="`Ketik cepat, mis. ${sec === 'bs' ? 'BSSB-B' : 'ABCDA-B'}`" :aria-label="`Ketik cepat jawaban ${label}`" @input="quickFill(sec, $event.target.value)" />
           <table class="w-full text-sm">
             <thead>
               <tr class="text-left text-slate-500">
@@ -286,7 +299,7 @@ function nextStudent() {
               </tr>
             </thead>
             <tbody>
-              <tr v-for="item in review.items[sec]" :key="item.no" :class="[STATUS_CLASS[item.status], item.ragu ? 'outline outline-2 -outline-offset-2 outline-amber-400' : '']">
+              <tr v-for="(item, i) in review.items[sec]" :key="item.no" :class="[STATUS_CLASS[preview.items[sec][i].status], item.ragu ? 'outline outline-2 -outline-offset-2 outline-amber-400' : '']">
                 <td class="px-2 py-1">{{ item.no }}</td>
                 <td class="font-semibold">{{ item.key }}</td>
                 <td class="py-1">

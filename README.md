@@ -8,7 +8,9 @@ Aplikasi manajemen kelas, ujian, dan koreksi lembar jawaban otomatis berbasis Ge
 - Lembar jawaban siap cetak per ujian (satu lembar per siswa, nama + ID tercetak)
 - Koreksi lembar template tanpa AI: foto banyak lembar sekaligus, siswa dikenali otomatis, jawaban ragu ditandai untuk dicek guru
 - Koreksi lembar lain dengan Gemini Vision (cadangan)
-- Tabel per soal yang bisa dikoreksi guru sebelum disimpan
+- Tabel per soal yang bisa dikoreksi guru sebelum disimpan; input manual cepat (ketik `ABCDA-B` per bagian), nilai tampil langsung
+- Aturan nilai per ujian: bobot per bagian (%) atau tabel konversi jumlah benar → nilai (mis. benar 13 → 70)
+- Mengubah kunci atau aturan nilai menghitung ulang nilai yang sudah tersimpan
 - Export CSV (hasil ujian, hasil siswa, laporan kelas)
 - Responsive dan siap deploy di Vercel
 

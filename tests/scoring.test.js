@@ -1,7 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { scoreAnswers } from '../lib/scoring.js'
-import { validateWeights } from '../lib/validate.js'
+import { validateScoreTable, validateWeights } from '../lib/validate.js'
+import { validateExamPayload } from '../lib/exam.js'
 import { csvNumber, parseCsv } from '../lib/csv.js'
 
 const OPTIONS = { pg: 'ABCDE', bs: 'BS', mj: 'ABCDEFGHIJK' }
@@ -71,4 +72,31 @@ test('csv: ; and , delimiters, Excel-friendly numbers', () => {
   assert.equal(csvNumber('100.00'), '100')
   assert.equal(csvNumber('82.50'), '82,5')
   assert.equal(csvNumber(''), '')
+})
+
+test('conversion table: score comes from the number of correct answers', () => {
+  // 20 questions over two sections; teacher decides 13 correct -> 70
+  const key = { pg: Array.from({ length: 15 }, (_, i) => ({ no: i + 1, answer: 'A' })), bs: Array.from({ length: 5 }, (_, i) => ({ no: i + 1, answer: 'B' })), mj: [] }
+  const table = Array.from({ length: 21 }, (_, k) => k * 5)
+  table[13] = 70
+  const answers = { pg: key.pg.map((k, i) => ({ no: k.no, jawaban: i < 10 ? 'A' : 'C' })), bs: key.bs.map((k, i) => ({ no: k.no, jawaban: i < 3 ? 'B' : 'S' })) }
+  const r = scoreAnswers(answers, key, { pg: 70, bs: 20, mj: 10, table })
+  assert.equal(r.correct, 13)
+  assert.equal(r.score, 70)
+  assert.equal(r.grade, 'C')
+  // every possible count maps to its row
+  for (let c = 0; c <= 20; c++) {
+    const a = { pg: key.pg.map((k, i) => ({ no: k.no, jawaban: i < Math.min(c, 15) ? 'A' : '-' })), bs: key.bs.map((k, i) => ({ no: k.no, jawaban: i < c - 15 ? 'B' : '-' })) }
+    assert.equal(scoreAnswers(a, key, { pg: 70, bs: 20, mj: 10, table }).score, table[c])
+  }
+})
+
+test('conversion table must have one value per possible count, each 0-100', () => {
+  assert.equal(validateScoreTable(undefined, 10), null)
+  assert.equal(validateScoreTable(Array(11).fill(50), 10), null)
+  assert.ok(validateScoreTable(Array(10).fill(50), 10))
+  assert.ok(validateScoreTable([...Array(10).fill(50), 120], 10))
+  const key = { pg: [{ no: 1, answer: 'A' }, { no: 2, answer: 'B' }], bs: [], mj: [] }
+  assert.equal(validateExamPayload(key, { pg: 100, bs: 0, mj: 0, table: [0, 60, 100] }).weightError, null)
+  assert.ok(validateExamPayload(key, { pg: 100, bs: 0, mj: 0, table: [0, 100] }).weightError)
 })

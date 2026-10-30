@@ -5,6 +5,7 @@ import { withPagination } from '../lib/pagination-response.js'
 import { json, error } from '../lib/response.js'
 import { normalizeAnswerKey, validateExamPayload } from '../lib/exam.js'
 import { csvResponse, csvNumber } from '../lib/csv.js'
+import { scoreAnswers } from '../lib/scoring.js'
 import { getSegments } from '../lib/route.js'
 
 const sortable = new Set(['title', 'subject', 'exam_date', 'created_at'])
@@ -264,7 +265,19 @@ async function handler(req) {
       ]
     )
 
-    return json(await getExam(id, user.id))
+    // Key or scoring rules changed: recalculate saved scores from the stored student answers
+    let regraded = 0
+    if (answer_key || weights) {
+      const saved = await query('SELECT id, answers FROM results WHERE exam_id = $1', [id])
+      for (const row of saved) {
+        const answers = typeof row.answers === 'string' ? JSON.parse(row.answers) : row.answers
+        const { score, grade, detail } = scoreAnswers(answers, normalizedKey, weights || existing.weights)
+        await query('UPDATE results SET score = $1, grade = $2, detail = $3 WHERE id = $4', [score, grade, JSON.stringify(detail), row.id])
+        regraded++
+      }
+    }
+
+    return json({ ...(await getExam(id, user.id)), regraded })
   }
 
   if (req.method === 'DELETE') {
