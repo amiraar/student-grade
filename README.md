@@ -5,7 +5,10 @@ Aplikasi manajemen kelas, ujian, dan koreksi lembar jawaban otomatis berbasis Ge
 ## Fitur Utama
 - Auth guru (login + registrasi)
 - Manajemen kelas, siswa, dan ujian
-- Koreksi lembar jawaban dengan Gemini Vision
+- Lembar jawaban siap cetak per ujian (satu lembar per siswa, nama + ID tercetak)
+- Koreksi lembar template tanpa AI: foto banyak lembar sekaligus, siswa dikenali otomatis, jawaban ragu ditandai untuk dicek guru
+- Koreksi lembar lain dengan Gemini Vision (cadangan)
+- Tabel per soal yang bisa dikoreksi guru sebelum disimpan
 - Export CSV (hasil ujian, hasil siswa, laporan kelas)
 - Responsive dan siap deploy di Vercel
 
@@ -27,6 +30,16 @@ Aplikasi manajemen kelas, ujian, dan koreksi lembar jawaban otomatis berbasis Ge
 4. Jalankan frontend (Vite) di folder frontend:
 	- `npm run dev`
 	- Dev server akan mem-proxy request `/api` ke `http://localhost:3000`
+
+## Tes
+- `npm test` — perhitungan nilai (20.000 kasus acak vs perhitungan acuan), CSV, dan pembaca lembar jawaban (foto sintetis miring/terbalik/berbayang)
+- `GEMINI_API_KEY=... node scripts/test-gemini.mjs foto.jpg jawaban.json` — ukur akurasi Gemini pada foto lembar jawabanmu sendiri
+
+## Cara koreksi (lembar template)
+1. Ujian → Cetak Lembar Jawaban → cetak A4, skala 100%.
+2. Siswa menghitamkan bulatan.
+3. Koreksi → pilih kelas & ujian → pilih semua foto sekaligus. Foto harus memuat seluruh lembar dan 4 kotak hitam di pojok.
+4. Cek jawaban yang ditandai **?**, ubah jika perlu, Simpan.
 
 ## Environment Variables (Vercel)
 Tambahkan di Vercel Dashboard -> Project -> Settings -> Environment Variables:

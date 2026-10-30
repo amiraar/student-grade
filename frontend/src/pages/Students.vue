@@ -84,7 +84,7 @@ onMounted(load)
 
 <template>
   <div class="space-y-6 fade-in">
-    <section class="card p-6 md:p-8">
+    <section class="card p-4 md:p-8">
       <h1 class="section-title mb-4">Data Siswa</h1>
       <div class="grid gap-4 md:grid-cols-4">
         <input v-model="search" @input="load" placeholder="Cari nama / NIS" class="input" />
@@ -110,7 +110,7 @@ onMounted(load)
       </div>
     </section>
 
-    <section class="card p-6 md:p-8">
+    <section class="card p-4 md:p-8">
       <h2 class="text-xl font-semibold mb-4">Tambah Siswa</h2>
       <div class="grid gap-3 md:grid-cols-3">
         <input v-model="form.name" placeholder="Nama siswa" class="input" />
@@ -124,7 +124,7 @@ onMounted(load)
       <p v-if="message.text" class="mt-2 text-sm" :class="message.type === 'error' ? 'text-red-600' : 'text-emerald-700'">{{ message.text }}</p>
     </section>
 
-    <section class="card p-6 md:p-8">
+    <section class="card p-4 md:p-8">
       <h2 class="text-xl font-semibold mb-4">Import CSV</h2>
       <p class="text-sm text-slate-600 mb-3">Format per baris: Nama;NIS (header opsional). Siswa dengan NIS yang sudah ada dilewati.</p>
       <div class="grid gap-3">

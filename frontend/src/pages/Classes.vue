@@ -31,7 +31,7 @@ onMounted(load)
 
 <template>
   <div class="space-y-6 fade-in">
-    <section class="card p-6 md:p-8">
+    <section class="card p-4 md:p-8">
       <h1 class="section-title mb-4">Daftar Kelas</h1>
       <div class="grid gap-4 md:grid-cols-[2fr_1fr]">
         <div class="space-y-3">

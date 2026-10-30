@@ -4,7 +4,7 @@ import { getPagination } from '../lib/pagination.js'
 import { withPagination } from '../lib/pagination-response.js'
 import { json, error } from '../lib/response.js'
 import { normalizeAnswerKey, validateExamPayload } from '../lib/exam.js'
-import { csvResponse } from '../lib/csv.js'
+import { csvResponse, csvNumber } from '../lib/csv.js'
 import { getSegments } from '../lib/route.js'
 
 const sortable = new Set(['title', 'subject', 'exam_date', 'created_at'])
@@ -134,7 +134,8 @@ async function handler(req) {
     if (req.method !== 'GET') return error('Method not allowed', 405)
 
     const rows = await query(
-      `SELECT s.name AS student_name, s.nis, c.name AS class_name, r.score, r.grade, r.detail, r.graded_at
+      `SELECT s.name AS student_name, s.nis, c.name AS class_name, r.score, r.grade, r.detail,
+         to_char(r.graded_at, 'YYYY-MM-DD HH24:MI') AS graded_at
        FROM results r
        JOIN students s ON s.id = r.student_id
        JOIN exams e ON e.id = r.exam_id
@@ -149,13 +150,13 @@ async function handler(req) {
       'PG Benar', 'PG Salah', 'PG Kosong', 'PG Double',
       'BS Benar', 'BS Salah', 'BS Kosong', 'BS Double',
       'MJ Benar', 'MJ Salah', 'MJ Kosong', 'MJ Double',
-      'Tanggal Koreksi'
+      'Tanggal Koreksi (UTC)'
     ]
 
     const data = rows.map((row) => {
       const detail = typeof row.detail === 'string' ? JSON.parse(row.detail) : row.detail || {}
       return [
-        row.student_name, row.nis, row.class_name, row.score, row.grade,
+        row.student_name, row.nis, row.class_name, csvNumber(row.score), row.grade,
         detail.pg?.correct ?? 0, detail.pg?.wrong ?? 0, detail.pg?.empty ?? 0, detail.pg?.double ?? 0,
         detail.bs?.correct ?? 0, detail.bs?.wrong ?? 0, detail.bs?.empty ?? 0, detail.bs?.double ?? 0,
         detail.mj?.correct ?? 0, detail.mj?.wrong ?? 0, detail.mj?.empty ?? 0, detail.mj?.double ?? 0,

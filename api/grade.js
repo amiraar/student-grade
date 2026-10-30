@@ -10,7 +10,8 @@ const parseJson = (value) => (typeof value === 'string' ? JSON.parse(value) : va
 
 // POST /api/grade
 // - { exam_id, student_id, image }   -> AI reads the sheet, then scores it
-// - { exam_id, student_id, answers } -> teacher-entered/corrected answers, scored without AI
+// - { exam_id, student_id, answers } -> answers read from the printed template in the browser
+//   (source: 'template') or typed/corrected by the teacher, scored without AI
 async function handler(req) {
   if (req.method !== 'POST') {
     return error('Method not allowed', 405)
@@ -19,7 +20,7 @@ async function handler(req) {
   const { error: authError, user } = await requireAuth(req)
   if (authError) return authError
 
-  const limitError = await rateLimit(req, { key: 'grade', limit: 30, windowMs: 60 * 1000 })
+  const limitError = await rateLimit(req, { key: 'grade', limit: 120, windowMs: 60 * 1000 })
   if (limitError) return limitError
 
   let body
@@ -28,7 +29,7 @@ async function handler(req) {
   } catch {
     return error('Body request tidak valid', 400)
   }
-  const { image, answers: manualAnswers, exam_id, student_id } = body || {}
+  const { image, answers: manualAnswers, exam_id, student_id, source } = body || {}
 
   const examId = Number(exam_id)
   const studentId = Number(student_id)
@@ -58,7 +59,7 @@ async function handler(req) {
   const weights = parseJson(exam.weights)
 
   let answers = manualAnswers
-  let sheetQuality = 'manual'
+  let sheetQuality = source === 'template' ? 'template' : 'manual'
   if (image) {
     const counts = {}
     ;['pg', 'bs', 'mj'].forEach((sec) => {

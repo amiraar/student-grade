@@ -24,7 +24,7 @@ onMounted(load)
 
 <template>
   <div class="space-y-6 fade-in">
-    <section class="card p-6 md:p-8">
+    <section class="card p-4 md:p-8">
       <h1 class="section-title mb-2">Ringkasan Aktivitas</h1>
       <p class="text-sm text-slate-600">Pantau progres koreksi dan manajemen kelas Anda.</p>
       <div class="mt-6 grid gap-4 md:grid-cols-3">
@@ -43,7 +43,7 @@ onMounted(load)
       </div>
     </section>
 
-    <section class="card p-6 md:p-8">
+    <section class="card p-4 md:p-8">
       <div class="flex items-center justify-between">
         <h2 class="text-xl font-semibold">Ujian Terbaru</h2>
         <RouterLink to="/exams" class="btn-ghost">Lihat semua</RouterLink>

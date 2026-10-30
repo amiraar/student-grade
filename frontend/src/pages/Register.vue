@@ -23,7 +23,7 @@ const submit = async () => {
 
 <template>
   <div class="mx-auto max-w-3xl">
-    <section class="card p-8 fade-in">
+    <section class="card p-6 md:p-8 fade-in">
       <p class="tag mb-3">Registrasi Guru</p>
       <h1 class="section-title mb-3">Buat akun baru</h1>
       <p class="text-sm text-slate-600">Akun guru digunakan untuk mengelola data kelas dan ujian.</p>

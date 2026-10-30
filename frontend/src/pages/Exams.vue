@@ -84,7 +84,7 @@ onMounted(load)
 
 <template>
   <div class="space-y-6 fade-in">
-    <section class="card p-6 md:p-8">
+    <section class="card p-4 md:p-8">
       <h1 class="section-title mb-4">Ujian</h1>
       <div class="grid gap-4 md:grid-cols-3">
         <input v-model="search" @input="load" placeholder="Cari judul" class="input" />
@@ -103,7 +103,7 @@ onMounted(load)
       </div>
     </section>
 
-    <section class="card p-6 md:p-8">
+    <section class="card p-4 md:p-8">
       <h2 class="text-xl font-semibold mb-4">Buat Ujian</h2>
       <div class="grid gap-3 md:grid-cols-2">
         <select v-model="form.class_id" class="input">
@@ -116,14 +116,32 @@ onMounted(load)
       </div>
 
       <div class="mt-4 grid gap-3 md:grid-cols-3">
-        <textarea v-model="form.pg" rows="4" class="input" placeholder="Kunci PG A–E (contoh: A,B,C,D,E)"></textarea>
-        <textarea v-model="form.bs" rows="4" class="input" placeholder="Kunci B/S (contoh: B,S,B)"></textarea>
-        <textarea v-model="form.mj" rows="4" class="input" placeholder="Kunci Menjodohkan (contoh: A,B,C)"></textarea>
+        <label class="block text-sm text-slate-600">
+          Kunci Pilihan Ganda (A–E)
+          <textarea v-model="form.pg" rows="4" class="input" placeholder="Kunci PG A–E (contoh: A,B,C,D,E)"></textarea>
+        </label>
+        <label class="block text-sm text-slate-600">
+          Kunci Benar/Salah (B/S)
+          <textarea v-model="form.bs" rows="4" class="input" placeholder="Kunci B/S (contoh: B,S,B)"></textarea>
+        </label>
+        <label class="block text-sm text-slate-600">
+          Kunci Menjodohkan (A–K)
+          <textarea v-model="form.mj" rows="4" class="input" placeholder="Kunci Menjodohkan (contoh: A,B,C)"></textarea>
+        </label>
       </div>
       <div class="mt-4 grid gap-3 md:grid-cols-3">
-        <input v-model="form.weight_pg" type="number" class="input" placeholder="Bobot PG" />
-        <input v-model="form.weight_bs" type="number" class="input" placeholder="Bobot B/S" />
-        <input v-model="form.weight_mj" type="number" class="input" placeholder="Bobot Menjodohkan" />
+        <label class="block text-sm text-slate-600">
+          Bobot PG (%)
+          <input v-model="form.weight_pg" type="number" class="input" placeholder="Bobot PG" />
+        </label>
+        <label class="block text-sm text-slate-600">
+          Bobot B/S (%)
+          <input v-model="form.weight_bs" type="number" class="input" placeholder="Bobot B/S" />
+        </label>
+        <label class="block text-sm text-slate-600">
+          Bobot Menjodohkan (%)
+          <input v-model="form.weight_mj" type="number" class="input" placeholder="Bobot Menjodohkan" />
+        </label>
       </div>
       <p class="mt-2 text-xs text-slate-500">Total bobot harus 100. Bagian tanpa kunci tidak dihitung; bobotnya dibagi ke bagian lain.</p>
       <button class="btn mt-4" @click="submit">Simpan Ujian</button>

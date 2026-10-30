@@ -70,14 +70,17 @@ onMounted(load)
 
 <template>
   <div class="space-y-6 fade-in" v-if="exam && form">
-    <section class="card p-6 md:p-8">
-      <div class="flex items-center justify-between">
+    <section class="card p-4 md:p-8">
+      <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <p class="tag">Detail Ujian</p>
           <h1 class="section-title mt-2">{{ exam.title }}</h1>
           <p class="text-sm text-slate-600">{{ exam.subject }} · {{ exam.exam_date }}</p>
         </div>
-        <RouterLink :to="`/exams/${exam.id}/results`" class="btn-ghost">Lihat Hasil</RouterLink>
+        <div class="flex flex-wrap gap-2">
+          <RouterLink :to="`/exams/${exam.id}/sheet?student=all`" class="btn-ghost">Cetak Lembar Jawaban</RouterLink>
+          <RouterLink :to="`/exams/${exam.id}/results`" class="btn-ghost">Lihat Hasil</RouterLink>
+        </div>
       </div>
       <div class="mt-6 grid gap-3 md:grid-cols-2">
         <input v-model="form.title" class="input" placeholder="Judul" />
@@ -85,14 +88,32 @@ onMounted(load)
         <input v-model="form.exam_date" type="date" class="input" />
       </div>
       <div class="mt-4 grid gap-3 md:grid-cols-3">
-        <textarea v-model="form.pg" rows="4" class="input" placeholder="Kunci PG (A–E)"></textarea>
-        <textarea v-model="form.bs" rows="4" class="input" placeholder="Kunci B/S"></textarea>
-        <textarea v-model="form.mj" rows="4" class="input" placeholder="Kunci Menjodohkan"></textarea>
+        <label class="block text-sm text-slate-600">
+          Kunci Pilihan Ganda (A–E)
+          <textarea v-model="form.pg" rows="4" class="input" placeholder="Kunci PG (A–E)"></textarea>
+        </label>
+        <label class="block text-sm text-slate-600">
+          Kunci Benar/Salah (B/S)
+          <textarea v-model="form.bs" rows="4" class="input" placeholder="Kunci B/S"></textarea>
+        </label>
+        <label class="block text-sm text-slate-600">
+          Kunci Menjodohkan (A–K)
+          <textarea v-model="form.mj" rows="4" class="input" placeholder="Kunci Menjodohkan"></textarea>
+        </label>
       </div>
       <div class="mt-4 grid gap-3 md:grid-cols-3">
-        <input v-model="form.weight_pg" type="number" class="input" placeholder="Bobot PG" />
-        <input v-model="form.weight_bs" type="number" class="input" placeholder="Bobot B/S" />
-        <input v-model="form.weight_mj" type="number" class="input" placeholder="Bobot Menjodohkan" />
+        <label class="block text-sm text-slate-600">
+          Bobot PG (%)
+          <input v-model="form.weight_pg" type="number" class="input" placeholder="Bobot PG" />
+        </label>
+        <label class="block text-sm text-slate-600">
+          Bobot B/S (%)
+          <input v-model="form.weight_bs" type="number" class="input" placeholder="Bobot B/S" />
+        </label>
+        <label class="block text-sm text-slate-600">
+          Bobot Menjodohkan (%)
+          <input v-model="form.weight_mj" type="number" class="input" placeholder="Bobot Menjodohkan" />
+        </label>
       </div>
       <button class="btn mt-4" @click="update">Simpan Perubahan</button>
       <p v-if="message.text" class="mt-2 text-sm" :class="message.type === 'error' ? 'text-red-600' : 'text-emerald-700'">{{ message.text }}</p>

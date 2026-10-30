@@ -44,7 +44,7 @@ onMounted(load)
 
 <template>
   <div class="space-y-6 fade-in">
-    <section class="card p-6 md:p-8">
+    <section class="card p-4 md:p-8">
       <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <h1 class="section-title">Hasil Ujian</h1>
         <button class="btn-ghost" @click="exportCsv">Unduh CSV</button>

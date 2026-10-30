@@ -12,6 +12,7 @@ import Exams from '../pages/Exams.vue'
 import ExamDetail from '../pages/ExamDetail.vue'
 import ExamResults from '../pages/ExamResults.vue'
 import Grade from '../pages/Grade.vue'
+import AnswerSheet from '../pages/AnswerSheet.vue'
 import Reports from '../pages/Reports.vue'
 import NotFound from '../pages/NotFound.vue'
 
@@ -28,6 +29,7 @@ const router = createRouter({
     { path: '/exams', component: Exams, meta: { requiresAuth: true } },
     { path: '/exams/:id', component: ExamDetail, meta: { requiresAuth: true } },
     { path: '/exams/:id/results', component: ExamResults, meta: { requiresAuth: true } },
+    { path: '/exams/:id/sheet', component: AnswerSheet, meta: { requiresAuth: true, bare: true } },
     { path: '/grade', component: Grade, meta: { requiresAuth: true } },
     { path: '/reports', component: Reports, meta: { requiresAuth: true } },
     { path: '/:pathMatch(.*)*', component: NotFound }

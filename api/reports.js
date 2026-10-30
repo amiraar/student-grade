@@ -1,6 +1,6 @@
 import { requireAuth } from '../lib/middleware.js'
 import { query } from '../lib/db.js'
-import { csvResponse } from '../lib/csv.js'
+import { csvResponse, csvNumber } from '../lib/csv.js'
 import { error } from '../lib/response.js'
 import { getSegments } from '../lib/route.js'
 
@@ -91,8 +91,8 @@ async function handler(req) {
         student.name,
         student.nis,
         ...(hasMultipleClasses ? [student.class_name] : []),
-        ...scores,
-        average
+        ...scores.map(csvNumber),
+        csvNumber(average)
       ]
     })
 

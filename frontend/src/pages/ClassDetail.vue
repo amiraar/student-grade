@@ -25,7 +25,7 @@ onMounted(load)
 
 <template>
   <div class="space-y-6 fade-in" v-if="detail">
-    <section class="card p-6 md:p-8">
+    <section class="card p-4 md:p-8">
       <h1 class="section-title mb-2">{{ detail.name }}</h1>
       <p class="text-sm text-slate-600">{{ detail.academic_year }} · Semester {{ detail.semester }}</p>
       <div class="mt-6 grid gap-4 md:grid-cols-2">

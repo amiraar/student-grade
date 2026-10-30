@@ -1,42 +1,43 @@
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, ref, watch, onMounted } from 'vue'
 import api, { errorMessage as getError } from '../lib/api.js'
+import { countsFromKey } from '../lib/sheet.js'
+import { fileToGray, readSheet } from '../lib/omr.js'
 
 const SECTIONS = { pg: 'Pilihan Ganda', bs: 'Benar/Salah', mj: 'Menjodohkan' }
-const QUALITY = { good: 'Baik', low_contrast: 'Kontras rendah', blurry: 'Buram', tilted: 'Miring', manual: 'Input manual' }
+const SOURCE = { template: 'Lembar template (tanpa AI)', manual: 'Input manual', good: 'AI · foto baik', low_contrast: 'AI · kontras rendah', blurry: 'AI · buram', tilted: 'AI · miring' }
 const STATUS_CLASS = {
-  correct: 'bg-emerald-50 text-emerald-700',
-  wrong: 'bg-red-50 text-red-700',
+  correct: 'bg-emerald-50 text-emerald-800',
+  wrong: 'bg-red-50 text-red-800',
   empty: 'bg-slate-50 text-slate-500',
-  double: 'bg-amber-50 text-amber-700'
+  double: 'bg-amber-50 text-amber-800'
 }
 
 const classes = ref([])
 const students = ref([])
 const exams = ref([])
-const graded = ref({}) // student_id -> score for the selected exam
-
+const exam = ref(null) // selected exam with answer key
+const results = ref({}) // student_id -> saved result
 const classId = ref('')
 const examId = ref('')
 const studentId = ref('')
-const imageFile = ref(null)
-const previewUrl = ref('')
 const fileInput = ref(null)
-const result = ref(null)
-const loading = ref(false)
+const busy = ref('')
 const errorMessage = ref('')
-const notice = ref('')
+const batch = ref([]) // one row per uploaded photo
+const review = ref(null) // { studentId, items, score, grade, source }
 
-const gradedCount = computed(() => students.value.filter((s) => graded.value[s.id] !== undefined).length)
+const studentName = (id) => students.value.find((s) => s.id === id)?.name || `Siswa #${id}`
+const gradedCount = computed(() => students.value.filter((s) => results.value[s.id]).length)
+const flaggedCount = computed(() => (review.value ? Object.values(review.value.items).flat().filter((i) => i.ragu).length : 0))
 
-const load = async () => {
+onMounted(async () => {
   const res = await api.get('/classes?per_page=200')
   classes.value = res.data.data
-}
+})
 
 watch(classId, async () => {
   examId.value = ''
-  studentId.value = ''
   students.value = []
   exams.value = []
   if (!classId.value) return
@@ -49,33 +50,100 @@ watch(classId, async () => {
 })
 
 watch(examId, async () => {
-  graded.value = {}
-  resetSheet()
+  exam.value = null
+  results.value = {}
+  studentId.value = ''
+  batch.value = []
+  review.value = null
   if (!examId.value) return
-  const res = await api.get(`/exams/${examId.value}/results`, { params: { per_page: 200 } })
-  graded.value = Object.fromEntries(res.data.data.map((r) => [r.student_id, Number(r.score)]))
+  const [examRes, resultsRes] = await Promise.all([
+    api.get(`/exams/${examId.value}`),
+    api.get(`/exams/${examId.value}/results`, { params: { per_page: 200 } })
+  ])
+  exam.value = examRes.data
+  results.value = Object.fromEntries(resultsRes.data.data.map((r) => [r.student_id, r]))
 })
 
-watch(studentId, resetSheet)
-
-function resetSheet() {
-  result.value = null
+// Selecting a student opens their saved answers (or an empty table) for checking / manual input
+watch(studentId, (id) => {
   errorMessage.value = ''
-  notice.value = ''
-  imageFile.value = null
-  previewUrl.value = ''
+  if (!id) return (review.value = null)
+  const saved = results.value[id]
+  openReview(id, saved?.answers || {}, saved ? { score: Number(saved.score), grade: saved.grade, source: saved.sheet_quality } : {})
+})
+
+// Same comparison as the server (lib/scoring.js); only for showing colours
+function openReview(id, answers, extra) {
+  const items = {}
+  for (const sec of Object.keys(SECTIONS)) {
+    items[sec] = (exam.value.answer_key?.[sec] || [])
+      .filter((k) => k.answer)
+      .map((k) => {
+        const a = (answers[sec] || []).find((x) => Number(x.no) === Number(k.no))
+        const answer = String(a?.jawaban ?? '-').trim().toUpperCase() || '-'
+        const status = answer === '-' ? 'empty' : answer === '!!' ? 'double' : answer === k.answer ? 'correct' : 'wrong'
+        return { no: Number(k.no), key: k.answer, answer, status, ragu: Boolean(a?.ragu) }
+      })
+  }
+  review.value = { studentId: id, items, score: null, grade: null, source: null, ...extra }
+}
+
+async function save(id, answers, payload = {}) {
+  const res = await api.post('/grade', { exam_id: examId.value, student_id: id, answers, ...payload })
+  results.value = { ...results.value, [id]: { student_id: id, score: res.data.score, grade: res.data.grade, answers: res.data.answers, sheet_quality: res.data.sheet_quality } }
+  return res.data
+}
+
+// Photos of the printed template: read in the browser, student found from the printed ID
+async function handleFiles(event) {
+  const files = [...event.target.files]
+  errorMessage.value = ''
+  batch.value = files.map((file) => ({ name: file.name, status: 'menunggu' }))
+  const counts = countsFromKey(exam.value.answer_key)
+  for (const [i, file] of files.entries()) {
+    const row = batch.value[i]
+    busy.value = `Membaca foto ${i + 1} dari ${files.length}...`
+    try {
+      const { gray, w, h } = await fileToGray(file)
+      const sheet = readSheet(gray, w, h, counts)
+      if (!sheet) {
+        if (files.length === 1 && studentId.value) {
+          row.status = 'bukan lembar template, dibaca AI...'
+          const data = await gradeWithAi(file)
+          Object.assign(row, { status: 'ok', studentId: studentId.value, score: data.score, flagged: 0, source: 'AI' })
+        } else {
+          row.status = 'gagal: lembar template tidak terdeteksi. Foto ulang: seluruh lembar & 4 kotak hitam terlihat.'
+        }
+        continue
+      }
+      if (sheet.id.examId !== Number(examId.value)) {
+        row.status = 'gagal: lembar ini untuk ujian lain'
+        continue
+      }
+      const id = sheet.id.studentId || Number(studentId.value)
+      if (!id) {
+        row.status = 'gagal: lembar kosong tanpa nama. Pilih siswa dulu, lalu unggah satu foto.'
+        continue
+      }
+      if (!students.value.some((s) => s.id === id)) {
+        row.status = 'gagal: siswa di lembar ini tidak ada di kelas'
+        continue
+      }
+      const data = await save(id, sheet.answers, { source: 'template' })
+      const flagged = Object.values(sheet.answers).flat().filter((a) => a.ragu).length
+      Object.assign(row, { status: 'ok', studentId: id, score: data.score, flagged, source: 'template' })
+    } catch (err) {
+      row.status = `gagal: ${err.response ? getError(err) : err.message}`
+    }
+  }
+  busy.value = ''
   if (fileInput.value) fileInput.value.value = ''
+  // With one photo, open it directly for checking
+  const done = batch.value.filter((r) => r.status === 'ok')
+  if (files.length === 1 && done.length) showStudent(done[0].studentId)
 }
 
-const handleFile = (event) => {
-  const file = event.target.files[0]
-  if (!file) return
-  imageFile.value = file
-  previewUrl.value = URL.createObjectURL(file)
-}
-
-// Phone photos are often > 4 MB, which is over the Vercel request limit.
-// Shrink to max 2000 px JPEG before sending.
+// Phone photos are often > 4 MB (over the Vercel request limit): shrink before sending
 const compressImage = (file, maxSize = 2000) =>
   new Promise((resolve, reject) => {
     const img = new Image()
@@ -92,73 +160,51 @@ const compressImage = (file, maxSize = 2000) =>
     img.src = URL.createObjectURL(file)
   })
 
-const sendGrade = async (payload) => {
-  loading.value = true
-  errorMessage.value = ''
-  notice.value = ''
-  try {
-    const res = await api.post('/grade', { exam_id: examId.value, student_id: studentId.value, ...payload })
-    result.value = res.data
-    graded.value = { ...graded.value, [studentId.value]: res.data.score }
-    return true
-  } catch (err) {
-    errorMessage.value = getError(err, 'Gagal mengoreksi lembar jawaban.')
-    return false
-  } finally {
-    loading.value = false
-  }
+async function gradeWithAi(file) {
+  const image = await compressImage(file)
+  const res = await api.post('/grade', { exam_id: examId.value, student_id: studentId.value, image })
+  results.value = { ...results.value, [studentId.value]: { student_id: studentId.value, score: res.data.score, grade: res.data.grade, answers: res.data.answers, sheet_quality: res.data.sheet_quality } }
+  return res.data
 }
 
-const gradeWithAi = async () => {
-  try {
-    const image = await compressImage(imageFile.value)
-    if (await sendGrade({ image })) notice.value = 'Nilai tersimpan. Periksa tabel di bawah; ubah jawaban yang salah dibaca lalu klik Simpan Perubahan.'
-  } catch (err) {
-    errorMessage.value = err.message
-  }
+function showStudent(id) {
+  if (studentId.value === id) openReview(id, results.value[id].answers, { score: Number(results.value[id].score), grade: results.value[id].grade, source: results.value[id].sheet_quality })
+  else studentId.value = id
 }
 
-// Empty answer table from the exam key, for grading without a photo
-const startManual = async () => {
-  errorMessage.value = ''
-  const res = await api.get(`/exams/${examId.value}`)
-  const items = {}
-  Object.keys(SECTIONS).forEach((sec) => {
-    items[sec] = (res.data.answer_key?.[sec] || [])
-      .filter((k) => k.answer)
-      .map((k) => ({ no: k.no, key: k.answer, answer: '-', status: 'empty' }))
-  })
-  result.value = { items, score: null, grade: null, sheet_quality: 'manual' }
-  notice.value = 'Isi jawaban siswa di tabel, lalu klik Simpan Perubahan.'
-}
-
-const saveEdits = async () => {
+async function saveReview() {
+  const r = review.value
   const answers = {}
-  Object.keys(SECTIONS).forEach((sec) => {
-    answers[sec] = (result.value.items[sec] || []).map((item) => ({
-      no: item.no,
-      jawaban: String(item.answer || '-').trim().toUpperCase() || '-'
-    }))
-  })
-  if (await sendGrade({ answers })) notice.value = 'Perubahan tersimpan.'
+  for (const sec of Object.keys(SECTIONS)) {
+    // A teacher-checked answer is no longer "ragu"
+    answers[sec] = r.items[sec].map((item) => ({ no: item.no, jawaban: String(item.answer || '-').trim().toUpperCase() || '-' }))
+  }
+  busy.value = 'Menyimpan...'
+  errorMessage.value = ''
+  try {
+    const data = await save(r.studentId, answers)
+    openReview(r.studentId, data.answers, { score: data.score, grade: data.grade, source: data.sheet_quality, saved: true })
+  } catch (err) {
+    errorMessage.value = getError(err, 'Gagal menyimpan.')
+  } finally {
+    busy.value = ''
+  }
 }
 
-const nextStudent = () => {
-  const index = students.value.findIndex((s) => s.id === studentId.value)
-  const ordered = [...students.value.slice(index + 1), ...students.value.slice(0, index + 1)]
-  const next = ordered.find((s) => graded.value[s.id] === undefined)
+function nextStudent() {
+  const list = students.value
+  const index = list.findIndex((s) => s.id === studentId.value)
+  const next = [...list.slice(index + 1), ...list.slice(0, index + 1)].find((s) => !results.value[s.id])
   if (next) studentId.value = next.id
-  else notice.value = 'Semua siswa di kelas ini sudah dinilai.'
+  else errorMessage.value = 'Semua siswa di kelas ini sudah dinilai.'
 }
-
-onMounted(load)
 </script>
 
 <template>
   <div class="space-y-6 fade-in">
-    <section class="card p-6 md:p-8">
+    <section class="card p-4 md:p-8">
       <h1 class="section-title mb-4">Koreksi Lembar Jawaban</h1>
-      <div class="grid gap-3 md:grid-cols-3">
+      <div class="grid gap-3 md:grid-cols-2">
         <select v-model="classId" class="input">
           <option value="">1. Pilih kelas</option>
           <option v-for="item in classes" :key="item.id" :value="item.id">{{ item.name }}</option>
@@ -167,68 +213,85 @@ onMounted(load)
           <option value="">2. Pilih ujian</option>
           <option v-for="item in exams" :key="item.id" :value="item.id">{{ item.title }} · {{ item.exam_date }}</option>
         </select>
-        <select v-model="studentId" class="input" :disabled="!examId">
-          <option value="">3. Pilih siswa</option>
-          <option v-for="item in students" :key="item.id" :value="item.id">
-            {{ item.name }}{{ graded[item.id] !== undefined ? ` — sudah dinilai (${graded[item.id]})` : '' }}
-          </option>
-        </select>
       </div>
       <p v-if="classId && !exams.length" class="mt-2 text-sm text-amber-700">Kelas ini belum punya ujian. Buat ujian dulu di menu Ujian.</p>
-      <p v-if="examId" class="mt-2 text-sm text-slate-600">Sudah dinilai: {{ gradedCount }} dari {{ students.length }} siswa</p>
 
-      <div v-if="studentId" class="mt-4 grid gap-4 md:grid-cols-2">
+      <div v-if="exam" class="mt-4 space-y-3">
+        <div class="flex flex-col gap-2 text-sm text-slate-600 sm:flex-row sm:items-center sm:justify-between">
+          <p>Sudah dinilai: <b>{{ gradedCount }}</b> dari {{ students.length }} siswa</p>
+          <RouterLink :to="`/exams/${exam.id}/sheet?student=all`" class="btn-ghost">Cetak lembar jawaban</RouterLink>
+        </div>
+
         <div class="rounded-2xl border border-slate-100 bg-white p-4">
-          <input ref="fileInput" type="file" accept="image/*" capture="environment" @change="handleFile" class="input" />
-          <p class="mt-2 text-xs text-slate-500">Foto tegak lurus, cahaya cukup, seluruh lembar terlihat.</p>
-          <img v-if="previewUrl" :src="previewUrl" class="mt-4 max-h-96 w-full rounded-2xl border object-contain" alt="Preview" />
+          <p class="mb-2 font-semibold">3. Foto lembar jawaban</p>
+          <input ref="fileInput" type="file" accept="image/*" multiple class="input" :disabled="Boolean(busy)" @change="handleFiles" />
+          <p class="mt-2 text-xs text-slate-500">
+            Lembar template dari aplikasi: boleh pilih banyak foto sekaligus, siswa dikenali otomatis, dibaca tanpa AI.
+            Lembar lain: pilih siswa di bawah dulu, lalu unggah satu foto (dibaca AI).
+          </p>
+          <p v-if="busy" class="mt-2 text-sm text-slate-700">{{ busy }}</p>
+          <ul v-if="batch.length" class="mt-3 divide-y divide-slate-100 text-sm">
+            <li v-for="row in batch" :key="row.name" class="flex flex-col gap-1 py-2 sm:flex-row sm:items-center sm:justify-between">
+              <span class="break-all text-slate-500">{{ row.name }}</span>
+              <span v-if="row.status === 'ok'" class="flex flex-wrap items-center gap-2">
+                <b>{{ studentName(row.studentId) }}: {{ row.score }}</b>
+                <span v-if="row.flagged" class="rounded-full bg-amber-100 px-2 text-amber-800">{{ row.flagged }} perlu dicek</span>
+                <button class="btn-ghost" @click="showStudent(row.studentId)">Periksa</button>
+              </span>
+              <span v-else :class="row.status.startsWith('gagal') ? 'text-red-600' : 'text-slate-600'">{{ row.status }}</span>
+            </li>
+          </ul>
         </div>
-        <div class="space-y-3 rounded-2xl border border-slate-100 bg-white p-4">
-          <button class="btn w-full" @click="gradeWithAi" :disabled="!imageFile || loading">
-            {{ loading ? 'Memproses...' : 'Koreksi dengan AI' }}
-          </button>
-          <button class="btn-ghost w-full" @click="startManual" :disabled="loading">Isi jawaban manual (tanpa foto)</button>
-          <p v-if="errorMessage" class="text-sm text-red-600">{{ errorMessage }}</p>
-          <p v-if="notice" class="text-sm text-emerald-700">{{ notice }}</p>
-          <div v-if="result && result.score !== null" class="text-sm">
-            <p class="text-2xl font-semibold">Nilai: {{ result.score }} ({{ result.grade }})</p>
-            <p class="text-slate-600">Kualitas foto: {{ QUALITY[result.sheet_quality] || result.sheet_quality || '-' }}</p>
-          </div>
-        </div>
+
+        <select v-model="studentId" class="input">
+          <option value="">Pilih siswa untuk diperiksa / diisi manual</option>
+          <option v-for="item in students" :key="item.id" :value="item.id">
+            {{ item.name }}{{ results[item.id] ? ` — ${Number(results[item.id].score)}` : ' — belum dinilai' }}
+          </option>
+        </select>
+        <p v-if="errorMessage" class="text-sm text-red-600">{{ errorMessage }}</p>
       </div>
     </section>
 
-    <section v-if="result" class="card p-6 md:p-8">
-      <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <h2 class="text-xl font-semibold">Periksa Jawaban</h2>
-        <div class="flex gap-2">
-          <button class="btn" @click="saveEdits" :disabled="loading">Simpan Perubahan</button>
-          <button class="btn-ghost" @click="nextStudent" :disabled="loading">Siswa Berikutnya →</button>
+    <section v-if="review" class="card p-4 md:p-8">
+      <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div>
+          <h2 class="text-xl font-semibold">{{ studentName(review.studentId) }}</h2>
+          <p v-if="review.score !== null" class="text-2xl font-semibold">Nilai: {{ review.score }} ({{ review.grade }})</p>
+          <p v-else class="text-sm text-slate-600">Belum dinilai. Isi jawaban siswa lalu simpan.</p>
+          <p v-if="review.source" class="text-xs text-slate-500">Sumber: {{ SOURCE[review.source] || review.source }}</p>
+          <p v-if="review.saved" class="text-sm text-emerald-700">Tersimpan.</p>
+          <p v-if="flaggedCount" class="mt-1 text-sm text-amber-800">
+            {{ flaggedCount }} jawaban ditandai <b>?</b> (tanda tipis / terhapus / ganda). Cocokkan dengan kertasnya.
+          </p>
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <button class="btn" :disabled="Boolean(busy)" @click="saveReview">Simpan</button>
+          <button class="btn-ghost" :disabled="Boolean(busy)" @click="nextStudent">Siswa berikutnya →</button>
         </div>
       </div>
-      <p class="mt-1 text-xs text-slate-500">Isi "-" untuk kosong, "!!" untuk jawaban ganda.</p>
-      <div class="mt-4 grid gap-4 md:grid-cols-3">
-        <div v-for="(label, sec) in SECTIONS" :key="sec" v-show="result.items[sec]?.length">
+      <p class="mt-2 text-xs text-slate-500">Isi "-" untuk kosong, "!!" untuk jawaban ganda.</p>
+      <div class="mt-4 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        <div v-for="(label, sec) in SECTIONS" :key="sec" v-show="review.items[sec]?.length">
           <h3 class="mb-2 font-semibold">
             {{ label }}
-            <span v-if="result.detail" class="text-sm font-normal text-slate-500">
-              ({{ result.detail[sec].correct }}/{{ result.items[sec].length }} benar)
-            </span>
+            <span class="text-sm font-normal text-slate-500">({{ review.items[sec].filter((i) => i.status === 'correct').length }}/{{ review.items[sec].length }} benar)</span>
           </h3>
           <table class="w-full text-sm">
             <thead>
               <tr class="text-left text-slate-500">
-                <th class="py-1">No</th>
+                <th class="px-2 py-1">No</th>
                 <th>Kunci</th>
                 <th>Jawaban</th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="item in result.items[sec]" :key="item.no" :class="STATUS_CLASS[item.status]">
+              <tr v-for="item in review.items[sec]" :key="item.no" :class="[STATUS_CLASS[item.status], item.ragu ? 'outline outline-2 -outline-offset-2 outline-amber-400' : '']">
                 <td class="px-2 py-1">{{ item.no }}</td>
                 <td class="font-semibold">{{ item.key }}</td>
                 <td class="py-1">
-                  <input v-model="item.answer" maxlength="2" class="w-14 rounded-lg border border-slate-200 bg-white px-2 py-1 uppercase" />
+                  <input v-model="item.answer" maxlength="2" class="w-16 rounded-lg border border-slate-200 bg-white px-2 py-1 text-base uppercase md:text-sm" :aria-label="`Jawaban ${label} nomor ${item.no}`" />
+                  <span v-if="item.ragu" class="ml-1 font-bold text-amber-700">?</span>
                 </td>
               </tr>
             </tbody>
