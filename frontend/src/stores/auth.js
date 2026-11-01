@@ -15,20 +15,26 @@ export const useAuthStore = defineStore('auth', {
     async login(payload) {
       this.loading = true
       this.error = null
-      const res = await api.post('/auth/login', payload)
-      this.token = res.data.token
-      this.user = res.data.user
-      localStorage.setItem('token', this.token)
-      this.loading = false
+      try {
+        const res = await api.post('/auth/login', payload)
+        this.token = res.data.token
+        this.user = res.data.user
+        localStorage.setItem('token', this.token)
+      } finally {
+        this.loading = false
+      }
     },
     async register(payload) {
       this.loading = true
       this.error = null
-      const res = await api.post('/auth/register', payload)
-      this.token = res.data.token
-      this.user = res.data.user
-      localStorage.setItem('token', this.token)
-      this.loading = false
+      try {
+        const res = await api.post('/auth/register', payload)
+        this.token = res.data.token
+        this.user = res.data.user
+        localStorage.setItem('token', this.token)
+      } finally {
+        this.loading = false
+      }
     },
     async fetchMe() {
       const res = await api.get('/auth/me')

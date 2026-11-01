@@ -2,7 +2,11 @@
   "buildCommand": "cd frontend && npm install && npm run build",
   "outputDirectory": "frontend/dist",
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/$1" },
+    { "source": "/api/auth/(.*)", "destination": "/api/auth?__path=$1" },
+    { "source": "/api/classes/(.*)", "destination": "/api/classes?__path=$1" },
+    { "source": "/api/students/(.*)", "destination": "/api/students?__path=$1" },
+    { "source": "/api/exams/(.*)", "destination": "/api/exams?__path=$1" },
+    { "source": "/api/reports/(.*)", "destination": "/api/reports?__path=$1" },
     { "source": "/((?!api).*)", "destination": "/index.html" }
   ],
   "headers": [

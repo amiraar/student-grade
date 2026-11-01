@@ -22,7 +22,7 @@ const submit = async () => {
 
 <template>
   <div class="mx-auto grid max-w-4xl gap-6 md:grid-cols-2">
-    <section class="card p-8 fade-in">
+    <section class="card p-6 md:p-8 fade-in">
       <p class="tag mb-3">Login Guru</p>
       <h1 class="section-title mb-3">Masuk untuk mulai koreksi</h1>
       <p class="text-sm text-slate-600">Gunakan akun guru untuk mengelola kelas, ujian, dan nilai.</p>
@@ -37,7 +37,7 @@ const submit = async () => {
         </p>
       </div>
     </section>
-    <section class="card p-8 fade-in">
+    <section class="card p-6 md:p-8 fade-in">
       <h2 class="text-xl font-semibold mb-4">Apa yang bisa dilakukan?</h2>
       <ul class="space-y-3 text-sm text-slate-600">
         <li>Kelola kelas, siswa, dan ujian dari satu dashboard.</li>

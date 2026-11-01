@@ -1,23 +1,29 @@
 <script setup>
 import { onMounted, ref } from 'vue'
-import api from '../lib/api.js'
+import api, { downloadFile, errorMessage } from '../lib/api.js'
 
 const classes = ref([])
 const classId = ref('')
 const academicYear = ref('')
 const semester = ref('')
+const error = ref('')
 
 const load = async () => {
   const res = await api.get('/classes?per_page=200')
   classes.value = res.data.data
 }
 
-const exportCsv = () => {
-  const params = new URLSearchParams()
-  if (classId.value) params.set('class_id', classId.value)
-  if (academicYear.value) params.set('academic_year', academicYear.value)
-  if (semester.value) params.set('semester', semester.value)
-  window.location.href = `/api/reports/export?${params.toString()}`
+const exportCsv = async () => {
+  error.value = ''
+  try {
+    await downloadFile('/reports/export', 'laporan-kelas.csv', {
+      class_id: classId.value || undefined,
+      academic_year: academicYear.value || undefined,
+      semester: semester.value || undefined
+    })
+  } catch (err) {
+    error.value = errorMessage(err, 'Gagal mengunduh laporan.')
+  }
 }
 
 onMounted(load)
@@ -25,7 +31,7 @@ onMounted(load)
 
 <template>
   <div class="space-y-6 fade-in">
-    <section class="card p-6 md:p-8">
+    <section class="card p-4 md:p-8">
       <h1 class="section-title mb-4">Laporan</h1>
       <div class="grid gap-3 md:grid-cols-3">
         <select v-model="classId" class="input">
@@ -40,6 +46,7 @@ onMounted(load)
         </select>
       </div>
       <button class="btn mt-4" @click="exportCsv">Unduh Laporan CSV</button>
+      <p v-if="error" class="mt-2 text-sm text-red-600">{{ error }}</p>
     </section>
   </div>
 </template>

@@ -1,12 +1,13 @@
-import { query } from '../../lib/db.js'
-import { comparePassword, hashPassword } from '../../lib/password.js'
-import { signToken } from '../../lib/auth.js'
-import { requireAuth } from '../../lib/middleware.js'
-import { json, error, corsHeaders } from '../../lib/response.js'
-import { sanitizeTeacher } from '../../lib/auth-response.js'
-import { rateLimit } from '../../lib/rate-limit.js'
+import { query } from '../lib/db.js'
+import { comparePassword, hashPassword } from '../lib/password.js'
+import { signToken } from '../lib/auth.js'
+import { requireAuth } from '../lib/middleware.js'
+import { json, error, corsHeaders } from '../lib/response.js'
+import { sanitizeTeacher } from '../lib/auth-response.js'
+import { rateLimit } from '../lib/rate-limit.js'
+import { getSegments } from '../lib/route.js'
 
-export default async function handler(req) {
+async function handler(req) {
   if (req.method === 'OPTIONS') {
     return new Response(null, {
       status: 204,
@@ -18,10 +19,8 @@ export default async function handler(req) {
     })
   }
 
-  const proto = req.headers.get('x-forwarded-proto') || 'https'
-  const host = req.headers.get('x-forwarded-host') || req.headers.get('host') || 'localhost'
-  const { pathname } = new URL(req.url, `${proto}://${host}`)
-  const action = pathname.split('/').filter(Boolean)[2]
+  const { segments } = getSegments(req, 'auth')
+  const [action] = segments
 
   // POST /api/auth/login
   if (action === 'login') {
@@ -113,3 +112,5 @@ export default async function handler(req) {
 
   return error('Not found', 404)
 }
+
+export default { fetch: handler }

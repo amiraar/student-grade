@@ -1,11 +1,12 @@
 <script setup>
 import { onMounted, ref } from 'vue'
-import api from '../lib/api.js'
+import api, { errorMessage } from '../lib/api.js'
 
 const classes = ref([])
 const meta = ref({ total: 0 })
 const search = ref('')
 const form = ref({ name: '', academic_year: '', semester: 1 })
+const error = ref('')
 
 const load = async () => {
   const res = await api.get('/classes', { params: { search: search.value } })
@@ -14,7 +15,13 @@ const load = async () => {
 }
 
 const submit = async () => {
-  await api.post('/classes', form.value)
+  error.value = ''
+  try {
+    await api.post('/classes', form.value)
+  } catch (err) {
+    error.value = errorMessage(err, 'Gagal menyimpan kelas.')
+    return
+  }
   form.value = { name: '', academic_year: '', semester: 1 }
   await load()
 }
@@ -24,7 +31,7 @@ onMounted(load)
 
 <template>
   <div class="space-y-6 fade-in">
-    <section class="card p-6 md:p-8">
+    <section class="card p-4 md:p-8">
       <h1 class="section-title mb-4">Daftar Kelas</h1>
       <div class="grid gap-4 md:grid-cols-[2fr_1fr]">
         <div class="space-y-3">
@@ -47,6 +54,7 @@ onMounted(load)
               <option :value="2">Semester 2</option>
             </select>
             <button class="btn w-full" @click="submit">Simpan</button>
+            <p v-if="error" class="text-sm text-red-600">{{ error }}</p>
           </div>
         </div>
       </div>

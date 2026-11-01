@@ -1,12 +1,14 @@
 <script setup>
-import { onMounted, ref } from 'vue'
-import api from '../lib/api.js'
+import { computed, onMounted, ref } from 'vue'
+import ScoreRules from '../components/ScoreRules.vue'
+import api, { errorMessage } from '../lib/api.js'
 
 const exams = ref([])
 const classes = ref([])
 const search = ref('')
 const subject = ref('')
 const classId = ref('')
+const message = ref({ type: '', text: '' })
 
 const form = ref({
   class_id: '',
@@ -18,7 +20,8 @@ const form = ref({
   mj: '',
   weight_pg: 70,
   weight_bs: 20,
-  weight_mj: 10
+  weight_mj: 10,
+  table: null
 })
 
 const load = async () => {
@@ -53,6 +56,12 @@ const buildAnswerKey = () => {
   }
 }
 
+const totalQuestions = computed(() => {
+  if (!form.value) return 0
+  const key = buildAnswerKey()
+  return key.pg.length + key.bs.length + key.mj.length
+})
+
 const submit = async () => {
   const payload = {
     class_id: form.value.class_id,
@@ -63,11 +72,19 @@ const submit = async () => {
     weights: {
       pg: Number(form.value.weight_pg),
       bs: Number(form.value.weight_bs),
-      mj: Number(form.value.weight_mj)
+      mj: Number(form.value.weight_mj),
+      ...(form.value.table ? { table: form.value.table.map(Number) } : {})
     }
   }
-  await api.post('/exams', payload)
-  form.value = { class_id: '', title: '', subject: '', exam_date: '', pg: '', bs: '', mj: '', weight_pg: 70, weight_bs: 20, weight_mj: 10 }
+  try {
+    await api.post('/exams', payload)
+  } catch (err) {
+    message.value = { type: 'error', text: errorMessage(err, 'Gagal menyimpan ujian.') }
+    return
+  }
+  const counts = `PG ${payload.answer_key.pg.length}, B/S ${payload.answer_key.bs.length}, MJ ${payload.answer_key.mj.length} soal`
+  message.value = { type: 'success', text: `Ujian tersimpan (${counts}).` }
+  form.value = { class_id: '', title: '', subject: '', exam_date: '', pg: '', bs: '', mj: '', weight_pg: 70, weight_bs: 20, weight_mj: 10, table: null }
   await load()
 }
 
@@ -76,7 +93,7 @@ onMounted(load)
 
 <template>
   <div class="space-y-6 fade-in">
-    <section class="card p-6 md:p-8">
+    <section class="card p-4 md:p-8">
       <h1 class="section-title mb-4">Ujian</h1>
       <div class="grid gap-4 md:grid-cols-3">
         <input v-model="search" @input="load" placeholder="Cari judul" class="input" />
@@ -95,7 +112,7 @@ onMounted(load)
       </div>
     </section>
 
-    <section class="card p-6 md:p-8">
+    <section class="card p-4 md:p-8">
       <h2 class="text-xl font-semibold mb-4">Buat Ujian</h2>
       <div class="grid gap-3 md:grid-cols-2">
         <select v-model="form.class_id" class="input">
@@ -108,16 +125,22 @@ onMounted(load)
       </div>
 
       <div class="mt-4 grid gap-3 md:grid-cols-3">
-        <textarea v-model="form.pg" rows="4" class="input" placeholder="Kunci PG (contoh: A,B,C,D)"></textarea>
-        <textarea v-model="form.bs" rows="4" class="input" placeholder="Kunci B/S (contoh: B,S,B)"></textarea>
-        <textarea v-model="form.mj" rows="4" class="input" placeholder="Kunci Menjodohkan (contoh: A,B,C)"></textarea>
+        <label class="block text-sm text-slate-600">
+          Kunci Pilihan Ganda (A–E)
+          <textarea v-model="form.pg" rows="4" class="input" placeholder="Kunci PG A–E (contoh: A,B,C,D,E)"></textarea>
+        </label>
+        <label class="block text-sm text-slate-600">
+          Kunci Benar/Salah (B/S)
+          <textarea v-model="form.bs" rows="4" class="input" placeholder="Kunci B/S (contoh: B,S,B)"></textarea>
+        </label>
+        <label class="block text-sm text-slate-600">
+          Kunci Menjodohkan (A–K)
+          <textarea v-model="form.mj" rows="4" class="input" placeholder="Kunci Menjodohkan (contoh: A,B,C)"></textarea>
+        </label>
       </div>
-      <div class="mt-4 grid gap-3 md:grid-cols-3">
-        <input v-model="form.weight_pg" type="number" class="input" placeholder="Bobot PG" />
-        <input v-model="form.weight_bs" type="number" class="input" placeholder="Bobot B/S" />
-        <input v-model="form.weight_mj" type="number" class="input" placeholder="Bobot Menjodohkan" />
-      </div>
+      <ScoreRules :form="form" :total="totalQuestions" />
       <button class="btn mt-4" @click="submit">Simpan Ujian</button>
+      <p v-if="message.text" class="mt-2 text-sm" :class="message.type === 'error' ? 'text-red-600' : 'text-emerald-700'">{{ message.text }}</p>
     </section>
   </div>
 </template>

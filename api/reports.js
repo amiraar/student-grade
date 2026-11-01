@@ -1,17 +1,15 @@
-import { requireAuth } from '../../lib/middleware.js'
-import { query } from '../../lib/db.js'
-import { csvResponse } from '../../lib/csv.js'
-import { error } from '../../lib/response.js'
+import { requireAuth } from '../lib/middleware.js'
+import { query } from '../lib/db.js'
+import { csvResponse, csvNumber } from '../lib/csv.js'
+import { error } from '../lib/response.js'
+import { getSegments } from '../lib/route.js'
 
-export default async function handler(req) {
+async function handler(req) {
   const { error: authError, user } = await requireAuth(req)
   if (authError) return authError
 
-  const proto = req.headers.get('x-forwarded-proto') || 'https'
-  const host = req.headers.get('x-forwarded-host') || req.headers.get('host') || 'localhost'
-  const url = new URL(req.url, `${proto}://${host}`)
-  const segments = url.pathname.split('/').filter(Boolean)
-  const action = segments[2]
+  const { url, segments } = getSegments(req, 'reports')
+  const [action] = segments
 
   // GET /api/reports/export
   if (action === 'export') {
@@ -93,8 +91,8 @@ export default async function handler(req) {
         student.name,
         student.nis,
         ...(hasMultipleClasses ? [student.class_name] : []),
-        ...scores,
-        average
+        ...scores.map(csvNumber),
+        csvNumber(average)
       ]
     })
 
@@ -103,3 +101,5 @@ export default async function handler(req) {
 
   return error('Not found', 404)
 }
+
+export default { fetch: handler }
