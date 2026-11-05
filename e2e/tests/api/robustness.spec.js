@@ -288,8 +288,6 @@ test.describe('auth input', () => {
 })
 
 test.describe('CSV exports', () => {
-  test.fail(() => true, KNOWN_BUG)
-
   test('a name starting with a formula character cannot run in a spreadsheet', async ({ request }) => {
     const { api } = await newTeacher(request)
     const klass = await createClass(api)
@@ -298,6 +296,19 @@ test.describe('CSV exports', () => {
     const res = await api.get(`/reports/export?class_id=${klass.id}`)
     const cell = parseCsv(res.text)[1][0].replace(/^"/, '')
     expect(cell.startsWith('=')).toBe(false)
+  })
+
+  test('a formula in an exam title, the results export and the header are covered too', async ({ request }) => {
+    const { api } = await newTeacher(request)
+    const klass = await createClass(api)
+    const student = await createStudent(api, klass.id, { name: '@SUM(A1)' })
+    const exam = await createExam(api, klass.id, { title: '=1+1' })
+    await api.post('/grade', { exam_id: exam.id, student_id: student.id, answers: { pg: [{ no: 1, jawaban: 'A' }] } })
+
+    const header = parseCsv((await api.get(`/reports/export?class_id=${klass.id}`)).text)[0]
+    expect(header).toContain(`'=1+1`)
+    const row = parseCsv((await api.get(`/exams/${exam.id}/results/export`)).text)[1]
+    expect(row[0]).toBe(`'@SUM(A1)`)
   })
 })
 

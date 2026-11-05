@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { scoreAnswers } from '../lib/scoring.js'
 import { validateScoreTable, validateWeights } from '../lib/validate.js'
 import { validateExamPayload } from '../lib/exam.js'
-import { csvNumber, parseCsv } from '../lib/csv.js'
+import { csvNumber, parseCsv, toCsv } from '../lib/csv.js'
 
 const OPTIONS = { pg: 'ABCDE', bs: 'BS', mj: 'ABCDEFGHIJK' }
 
@@ -72,6 +72,15 @@ test('csv: ; and , delimiters, Excel-friendly numbers', () => {
   assert.equal(csvNumber('100.00'), '100')
   assert.equal(csvNumber('82.50'), '82,5')
   assert.equal(csvNumber(''), '')
+})
+
+test('csv: a cell that would run as a formula is neutralized, other text is untouched', () => {
+  for (const cell of ['=1+1', '+1', '-1', '@SUM(A1)', '\t=1']) {
+    assert.equal(toCsv([[cell]]), `'${cell}`)
+  }
+  assert.equal(toCsv([['=A;B']]), `"'=A;B"`)
+  assert.equal(toCsv([['\r=1']]), `"'\r=1"`)
+  assert.equal(toCsv([['Andi', 'X=1', '82,5', 100, null]]), 'Andi;X=1;82,5;100;')
 })
 
 test('conversion table: score comes from the number of correct answers', () => {
