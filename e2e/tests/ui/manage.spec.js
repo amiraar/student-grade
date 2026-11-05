@@ -310,3 +310,95 @@ test('reports: downloads the class report with the filters applied', async ({ pa
   expect(csv).toContain('Anak B')
   expect(csv).not.toContain('Anak A')
 })
+
+test.describe('answer key formats', () => {
+  async function openForm(page, request) {
+    const { api, token } = await newTeacher(request)
+    const klass = await createClass(api, { name: 'Kelas Kunci' })
+    await loginAs(page, token)
+    await page.goto('/exams')
+    await selectWithOption(page, 'Pilih kelas').selectOption({ label: klass.name })
+    await page.getByPlaceholder('Judul ujian').fill('Format Kunci')
+    await page.getByPlaceholder('Mata pelajaran').last().fill('IPA')
+    await page.locator('input[type=date]').fill('2026-05-01')
+    return api
+  }
+
+  for (const [label, typed, expected] of [
+    ['commas', 'A,B,C,D', 'ABCD'],
+    ['one per line', 'A\nB\nC\nD', 'ABCD'],
+    ['letters run together, several lines', 'AA\nBA\nCCA\nDDAB', 'AABACCADDAB'],
+    ['numbered lines', '1. A\n2. B\n3) C\n4 D', 'ABCD']
+  ]) {
+    test(`${label} are read one letter per question`, async ({ page, request }) => {
+      const api = await openForm(page, request)
+      await page.getByLabel(/Kunci Pilihan Ganda/).fill(typed)
+      await page.getByRole('button', { name: 'Simpan Ujian' }).click()
+      await expect(page.getByText(`Ujian tersimpan (PG ${expected.length}, B/S 0, MJ 0 soal).`)).toBeVisible()
+
+      const saved = (await api.get('/exams')).body.data[0].answer_key.pg
+      expect(saved.map((item) => item.answer).join('')).toBe(expected)
+      expect(saved.map((item) => item.no)).toEqual(expected.split('').map((_, i) => i + 1))
+    })
+  }
+
+  test('every section accepts letters run together', async ({ page, request }) => {
+    const api = await openForm(page, request)
+    await page.getByLabel(/Kunci Benar/).fill('bssb')
+    await page.getByLabel(/Kunci Menjodohkan/).fill('KJ\nA')
+    await page.getByRole('button', { name: 'Simpan Ujian' }).click()
+    await expect(page.getByText('Ujian tersimpan (PG 0, B/S 4, MJ 3 soal).')).toBeVisible()
+    const key = (await api.get('/exams')).body.data[0].answer_key
+    expect(key.bs.map((item) => item.answer)).toEqual(['B', 'S', 'S', 'B'])
+    expect(key.mj.map((item) => item.answer)).toEqual(['K', 'J', 'A'])
+  })
+
+  test('the form shows how the key is read, before saving', async ({ page, request }) => {
+    await openForm(page, request)
+    await page.getByLabel(/Kunci Pilihan Ganda/).fill('AA\nBA')
+    await expect(page.getByText('4 soal: 1.A 2.A 3.B 4.A')).toBeVisible()
+  })
+
+  test('the conversion table counts letters as questions', async ({ page, request }) => {
+    await openForm(page, request)
+    await page.getByLabel(/Kunci Pilihan Ganda/).fill('AB\nC')
+    await page.getByRole('radio', { name: /Tabel: jumlah benar/ }).check()
+    await expect(page.getByLabel('Nilai jika benar 3')).toHaveValue('100')
+    await expect(page.getByLabel('Nilai jika benar 1')).toHaveValue('33.33')
+  })
+
+  test.describe('with provoked 4xx responses', () => {
+    test.use({ allowedErrors: [/Failed to load resource/] })
+
+    for (const [label, typed] of [
+      ['a dash', 'A,-,C'],
+      ['a letter outside the options', 'AZ'],
+      ['a stray number', 'A,1,C']
+    ]) {
+      test(`${label} is refused, so the numbering cannot shift silently`, async ({ page, request }) => {
+        const api = await openForm(page, request)
+        await page.getByLabel(/Kunci Pilihan Ganda/).fill(typed)
+        await page.getByRole('button', { name: 'Simpan Ujian' }).click()
+        await expect(page.getByText('Bagian PG No.2: jawaban tidak valid')).toBeVisible()
+        expect((await api.get('/exams')).body.data).toEqual([])
+      })
+    }
+  })
+
+  test('the edit page reads the same formats and regrades', async ({ page, request }) => {
+    const { api, token } = await newTeacher(request)
+    const klass = await createClass(api)
+    const student = await createStudent(api, klass.id)
+    const exam = await createExam(api, klass.id, { answer_key: { pg: [{ no: 1, answer: 'A' }] } })
+    await api.post('/grade', { exam_id: exam.id, student_id: student.id, answers: { pg: answers('A') } })
+    await loginAs(page, token)
+    await page.goto(`/exams/${exam.id}`)
+
+    await page.getByLabel(/Kunci Pilihan Ganda/).fill('AB\nCD')
+    await expect(page.getByText('4 soal: 1.A 2.B 3.C 4.D')).toBeVisible()
+    await page.getByRole('button', { name: 'Simpan Perubahan' }).click()
+    await expect(page.getByText('Perubahan tersimpan. 1 nilai siswa dihitung ulang.')).toBeVisible()
+    expect((await api.get(`/exams/${exam.id}`)).body.answer_key.pg.map((item) => item.answer)).toEqual(['A', 'B', 'C', 'D'])
+    expect((await api.get(`/exams/${exam.id}/results`)).body.data[0].score).toBe('25.00')
+  })
+})

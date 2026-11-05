@@ -21,6 +21,15 @@ test('every page fits the phone screen and shows the full menu', async ({ page, 
   }
 })
 
+test('a long answer key stays within the phone screen', async ({ page, request }) => {
+  const ctx = await scenario(request)
+  await loginAs(page, ctx.token)
+  await page.goto('/exams')
+  await page.getByLabel(/Kunci Pilihan Ganda/).fill('ABCDE'.repeat(20))
+  await expect(page.getByText(/^100 soal: 1\.A 2\.B/)).toBeVisible()
+  await noSideScroll(page, '/exams with a 100 question key')
+})
+
 test('login page fits the phone screen', async ({ page }) => {
   await page.goto('/login')
   await expect(page.getByRole('button', { name: 'Masuk' })).toBeVisible()
