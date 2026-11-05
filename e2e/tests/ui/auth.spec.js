@@ -38,7 +38,10 @@ test.describe('with provoked 4xx responses', () => {
     await loginAs(page, 'token-rusak')
     await page.goto('/classes')
     await expect(page).toHaveURL(/\/login$/)
-    expect(await page.evaluate(() => localStorage.getItem('token'))).toBeNull()
+    // The 401 reloads the page, so a read can land in the middle of that navigation: retry it
+    await expect(async () => {
+      expect(await page.evaluate(() => localStorage.getItem('token'))).toBeNull()
+    }).toPass()
   })
 })
 
@@ -56,7 +59,10 @@ test('register, land on the dashboard, log out, log back in', async ({ page }) =
 
   await page.getByRole('button', { name: 'Keluar' }).click()
   await expect(page).toHaveURL(/\/login$/)
-  expect(await page.evaluate(() => localStorage.getItem('token'))).toBeNull()
+  // Logging out reloads the page, so a read can land in the middle of that navigation: retry it
+  await expect(async () => {
+    expect(await page.evaluate(() => localStorage.getItem('token'))).toBeNull()
+  }).toPass()
 
   await page.goto('/classes')
   await expect(page).toHaveURL(/\/login$/)
