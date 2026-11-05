@@ -189,8 +189,6 @@ test.describe('exam fields', () => {
 })
 
 test.describe('exam without questions', () => {
-  test.fail(() => true, KNOWN_BUG)
-
   test('answer key without any question', async ({ request }) => {
     const { api, klass, exam } = await scenario(request)
     expect4xx(await api.post('/exams', examBody(klass.id, { answer_key: { pg: [], bs: [], mj: [] } })), 'POST empty key')
