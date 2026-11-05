@@ -234,8 +234,6 @@ test.describe('grading input', () => {
 })
 
 test.describe('student import', () => {
-  test.fail(() => true, KNOWN_BUG)
-
   test('csv that is not text', async ({ request }) => {
     const { api, klass } = await scenario(request)
     expect4xx(await api.post('/students/import', { class_id: klass.id, csv: 123 }), 'csv=123')
@@ -252,6 +250,14 @@ test.describe('student import', () => {
     const res = await api.post('/students/import', { class_id: klass.id, csv })
     expect(res.status, res.text.slice(0, 120)).toBe(200)
     expect(res.body).toMatchObject({ inserted: 1, skipped: 2 })
+  })
+
+  test('a file holding a NUL character skips that row', async ({ request }) => {
+    const { api, klass } = await scenario(request)
+    const csv = Buffer.from(`Nama;NIS\nRu\0sak;${uid()}\nBaik;${uid()}\n`).toString('base64')
+    const res = await api.post('/students/import', { class_id: klass.id, csv })
+    expect(res.status, res.text.slice(0, 120)).toBe(200)
+    expect(res.body).toMatchObject({ inserted: 1, skipped: 1 })
   })
 })
 

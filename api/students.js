@@ -141,6 +141,7 @@ async function handler(req) {
     }
     const { class_id, csv } = body || {}
     if (!csv) return error('CSV wajib diisi', 400)
+    if (typeof csv !== 'string') return error('CSV tidak valid', 400)
 
     const content = decodeCsvInput(csv)
     const rows = parseCsv(content)
@@ -158,10 +159,10 @@ async function handler(req) {
     const entries = rows.slice(startIndex).map((row) => ({
       name: row[nameIndex >= 0 ? nameIndex : 0],
       nis: row[nisIndex >= 0 ? nisIndex : 1],
-      class_id: row[classIndex >= 0 ? classIndex : 2] || class_id
+      class_id: parseId(row[classIndex >= 0 ? classIndex : 2] || class_id)
     }))
 
-    const classIds = [...new Set(entries.map((item) => Number(item.class_id)).filter(Boolean))]
+    const classIds = [...new Set(entries.map((item) => item.class_id).filter(Boolean))]
     if (!classIds.length) return error('class_id wajib diisi', 400)
 
     const classes = await query(
@@ -173,13 +174,15 @@ async function handler(req) {
     let inserted = 0
     for (const entry of entries) {
       if (!entry.name || !entry.nis || !entry.class_id) continue
-      if (!allowed.has(Number(entry.class_id))) continue
+      if (!allowed.has(entry.class_id)) continue
+      // A decoded file can hold anything: rows the columns cannot store count as skipped
+      if (studentFieldError(entry.name, entry.nis) || `${entry.name}${entry.nis}`.includes('\0')) continue
       const added = await query(
         `INSERT INTO students (class_id, name, nis)
          VALUES ($1, $2, $3)
          ON CONFLICT (nis) DO NOTHING
          RETURNING id`,
-        [Number(entry.class_id), entry.name, entry.nis]
+        [entry.class_id, entry.name, entry.nis]
       )
       inserted += added.length
     }
