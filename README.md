@@ -36,6 +36,13 @@ Aplikasi manajemen kelas, ujian, dan koreksi lembar jawaban otomatis berbasis Ge
 ## Tes
 - `npm test` — perhitungan nilai (20.000 kasus acak vs perhitungan acuan), CSV, dan pembaca lembar jawaban (foto sintetis miring/terbalik/berbayang)
 - `GEMINI_API_KEY=... node scripts/test-gemini.mjs foto.jpg jawaban.json` — ukur akurasi Gemini pada foto lembar jawabanmu sendiri
+- `npm run test:e2e` — E2E/regresi dengan Playwright (API + browser). Butuh Docker. Sekali di awal, dari root repo: `npm --prefix e2e ci`, lalu `npm --prefix e2e exec -- playwright install chromium`
+
+Cara kerja E2E:
+- Build produksi frontend dan handler `api/*.js` asli dijalankan server lokal yang mengikuti `vercel.json`.
+- Database: Postgres sekali pakai di Docker, diakses driver Neon asli lewat proxy HTTP lokal. `.env` tidak dibaca dan koneksi keluar diblokir, jadi database sungguhan tidak tersentuh.
+- Gemini diganti stub: yang diuji penanganan balasannya, bukan akurasi model.
+- Test bertanda `test.fail` mencatat bug yang sudah diketahui. Setelah bugnya diperbaiki, test itu melapor "Expected to fail, but passed": cabut tandanya.
 
 ## Cara koreksi (lembar template)
 1. Ujian → Cetak Lembar Jawaban → cetak A4, skala 100%.
