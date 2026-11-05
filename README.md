@@ -64,8 +64,10 @@ Frontend (build-time):
 ## Neon Database Setup
 1. Buat project di Neon.
 2. Copy connection string ke `DATABASE_URL`.
-3. Jalankan file migrasi `migrations/001_initial.sql`.
+3. Jalankan semua file di `migrations/` berurutan (`001_initial.sql`, lalu `002_nis_per_teacher.sql`).
 4. Jalankan seed `seed/001_seed.sql`.
+
+Database yang sudah berjalan: jalankan migrasi yang belum dipakai bersamaan dengan deploy kode yang membutuhkannya. `002_nis_per_teacher.sql` tidak kompatibel dengan kode sebelumnya: selama keduanya belum selaras, tambah dan import siswa gagal.
 
 Seed akun guru:
 - Email: `guru@example.com`

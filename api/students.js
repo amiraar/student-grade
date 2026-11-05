@@ -113,10 +113,10 @@ async function handler(req) {
       let rows
       try {
         rows = await query(
-          `INSERT INTO students (class_id, name, nis)
-           VALUES ($1, $2, $3)
+          `INSERT INTO students (class_id, teacher_id, name, nis)
+           VALUES ($1, $2, $3, $4)
            RETURNING *`,
-          [classId, name, nis]
+          [classId, user.id, name, nis]
         )
       } catch (err) {
         if (err?.code === '23505') return error('NIS sudah terdaftar', 409)
@@ -178,11 +178,11 @@ async function handler(req) {
       // A decoded file can hold anything: rows the columns cannot store count as skipped
       if (studentFieldError(entry.name, entry.nis) || `${entry.name}${entry.nis}`.includes('\0')) continue
       const added = await query(
-        `INSERT INTO students (class_id, name, nis)
-         VALUES ($1, $2, $3)
-         ON CONFLICT (nis) DO NOTHING
+        `INSERT INTO students (class_id, teacher_id, name, nis)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (teacher_id, nis) DO NOTHING
          RETURNING id`,
-        [entry.class_id, entry.name, entry.nis]
+        [entry.class_id, user.id, entry.name, entry.nis]
       )
       inserted += added.length
     }

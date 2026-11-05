@@ -1,7 +1,7 @@
 // Prepares everything the suite needs, then runs the harness server:
 // fresh database -> schema and seed -> production build of the frontend -> server.
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -58,8 +58,8 @@ step('starting a fresh database')
 execFileSync('docker', compose('down', '-v', '--remove-orphans'), { stdio: 'inherit' })
 execFileSync('docker', compose('up', '-d', '--wait'), { stdio: 'inherit' })
 
-step('applying migration and seed')
-applySql('migrations/001_initial.sql')
+step('applying migrations and seed')
+for (const file of readdirSync(join(root, 'migrations')).sort()) applySql(`migrations/${file}`)
 applySql('seed/001_seed.sql')
 await waitForProxy()
 

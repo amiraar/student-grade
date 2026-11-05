@@ -1,12 +1,6 @@
 // Bad input must get a clear 4xx from the API, not an unhandled 500.
-//
-// A test.fail line marks a group that fails today because of a confirmed bug, so the suite stays
-// usable as a regression gate. Once fixed, the group reports "Expected to fail, but passed":
-// remove its test.fail line.
 import { test, expect } from '@playwright/test'
 import { client, createClass, createExam, createStudent, newTeacher, parseCsv, scenario, STANDARD_KEY, STANDARD_WEIGHTS, uid } from '../helpers.js'
-
-const KNOWN_BUG = 'Known bug, see the comment at the top of this file'
 
 // Soft, so every case in a test is reported rather than only the first failure
 const expect4xx = (res, label) => {
@@ -313,8 +307,6 @@ test.describe('CSV exports', () => {
 })
 
 test.describe('between teachers', () => {
-  test.fail(() => true, KNOWN_BUG)
-
   test('two teachers can use the same NIS in their own classes', async ({ request }) => {
     const a = await newTeacher(request)
     const b = await newTeacher(request)
@@ -331,5 +323,37 @@ test.describe('between teachers', () => {
     await createStudent(a.api, (await createClass(a.api)).id, { nis })
     const res = await b.api.post('/students/import', { class_id: (await createClass(b.api)).id, csv: `Nama;NIS\nSiswa B;${nis}\n` })
     expect(res.body).toMatchObject({ inserted: 1, skipped: 0 })
+  })
+
+  test('changing a NIS to one used by another teacher is allowed', async ({ request }) => {
+    const a = await newTeacher(request)
+    const b = await newTeacher(request)
+    const theirs = await createStudent(a.api, (await createClass(a.api)).id)
+    const mine = await createStudent(b.api, (await createClass(b.api)).id)
+    const res = await b.api.put(`/students/${mine.id}`, { nis: theirs.nis })
+    expect(res.status, res.text.slice(0, 120)).toBe(200)
+    expect((await a.api.get(`/students/${theirs.id}`)).body.nis).toBe(theirs.nis)
+  })
+
+  test('one teacher still cannot use a NIS twice, even across their classes', async ({ request }) => {
+    const { api } = await newTeacher(request)
+    const first = await createClass(api)
+    const second = await createClass(api)
+    const student = await createStudent(api, first.id)
+
+    expect((await api.post('/students', { class_id: second.id, name: 'Lain', nis: student.nis })).status).toBe(409)
+    const imported = await api.post('/students/import', { class_id: second.id, csv: `Nama;NIS\nLain;${student.nis}\n` })
+    expect(imported.body).toMatchObject({ inserted: 0, skipped: 1 })
+    // Moving between one's own classes keeps the NIS and is not a conflict with itself
+    expect((await api.put(`/students/${student.id}`, { class_id: second.id })).status).toBe(200)
+  })
+
+  test('deleting a teacher\'s class frees the NIS for that teacher', async ({ request }) => {
+    const { api } = await newTeacher(request)
+    const klass = await createClass(api)
+    const student = await createStudent(api, klass.id)
+    await api.delete(`/classes/${klass.id}`)
+    const again = await createClass(api)
+    expect((await api.post('/students', { class_id: again.id, name: 'Kembali', nis: student.nis })).status).toBe(201)
   })
 })
