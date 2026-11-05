@@ -43,6 +43,7 @@ Cara kerja E2E:
 - Database: Postgres sekali pakai di Docker, diakses driver Neon asli lewat proxy HTTP lokal. `.env` tidak dibaca dan koneksi keluar diblokir, jadi database sungguhan tidak tersentuh.
 - Gemini diganti stub: yang diuji penanganan balasannya, bukan akurasi model.
 - Test bertanda `test.fail` mencatat bug yang sudah diketahui. Setelah bugnya diperbaiki, test itu melapor "Expected to fail, but passed": cabut tandanya.
+- Pakai Node 22 sesuai `engines`. Di Node 24 pada Windows pernah muncul `worker process exited unexpectedly (code=3221226505)`: proses worker Playwright crash sebelum test berjalan, jadi itu bukan kegagalan test tersebut.
 
 ## Cara koreksi (lembar template)
 1. Ujian → Cetak Lembar Jawaban → cetak A4, skala 100%.
