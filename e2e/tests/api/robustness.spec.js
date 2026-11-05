@@ -61,8 +61,6 @@ test.describe('identifiers, filters and pagination', () => {
 })
 
 test.describe('text the database cannot store', () => {
-  test.fail(() => true, KNOWN_BUG)
-
   for (const path of ['/classes', '/students', '/exams']) {
     test(`NUL in the search of ${path}`, async ({ request }) => {
       const { api } = await newTeacher(request)
@@ -70,6 +68,14 @@ test.describe('text the database cannot store', () => {
       expect(res.status, `${res.status} ${res.text.slice(0, 120)}`).toBeLessThan(500)
     })
   }
+
+  test('a backslash, emoji and accents are ordinary text', async ({ request }) => {
+    const { api } = await newTeacher(request)
+    const name = 'C:\\u0000 Kelas 😀 é'
+    const res = await api.post('/classes', { name, academic_year: '2025/2026', semester: 1 })
+    expect(res.status, res.text.slice(0, 120)).toBe(201)
+    expect(res.body.name).toBe(name)
+  })
 
   test('NUL and broken unicode in a JSON body', async ({ request }) => {
     const { api } = await newTeacher(request)

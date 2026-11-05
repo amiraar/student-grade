@@ -1,3 +1,4 @@
+import { readJson } from '../lib/body.js'
 import { query } from '../lib/db.js'
 import { comparePassword, hashPassword } from '../lib/password.js'
 import { signToken } from '../lib/auth.js'
@@ -31,7 +32,7 @@ async function handler(req) {
 
     let body
     try {
-      body = await req.json()
+      body = await readJson(req)
     } catch {
       return error('Body request tidak valid', 400)
     }
@@ -60,7 +61,7 @@ async function handler(req) {
 
     let body
     try {
-      body = await req.json()
+      body = await readJson(req)
     } catch {
       return error('Body request tidak valid', 400)
     }

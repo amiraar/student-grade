@@ -1,3 +1,4 @@
+import { readJson } from '../lib/body.js'
 import { requireAuth } from '../lib/middleware.js'
 import { query } from '../lib/db.js'
 import { getPagination } from '../lib/pagination.js'
@@ -17,7 +18,8 @@ async function handler(req) {
   const { error: authError, user } = await requireAuth(req)
   if (authError) return authError
 
-  const { url, segments } = getSegments(req, 'classes')
+  const { url, segments, badQuery } = getSegments(req, 'classes')
+  if (badQuery) return error('Parameter tidak valid', 400)
   const [idSegment, sub] = segments
 
   // /api/classes — list or create
@@ -67,7 +69,7 @@ async function handler(req) {
     if (req.method === 'POST') {
       let body
       try {
-        body = await req.json()
+        body = await readJson(req)
       } catch {
         return error('Body request tidak valid', 400)
       }
@@ -165,7 +167,7 @@ async function handler(req) {
   if (req.method === 'PUT') {
     let body
     try {
-      body = await req.json()
+      body = await readJson(req)
     } catch {
       return error('Body request tidak valid', 400)
     }

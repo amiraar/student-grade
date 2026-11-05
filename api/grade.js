@@ -1,3 +1,4 @@
+import { readJson } from '../lib/body.js'
 import { requireAuth } from '../lib/middleware.js'
 import { analyzeAnswerSheet } from '../lib/gemini.js'
 import { scoreAnswers } from '../lib/scoring.js'
@@ -25,7 +26,7 @@ async function handler(req) {
 
   let body
   try {
-    body = await req.json()
+    body = await readJson(req)
   } catch {
     return error('Body request tidak valid', 400)
   }

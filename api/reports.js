@@ -9,7 +9,8 @@ async function handler(req) {
   const { error: authError, user } = await requireAuth(req)
   if (authError) return authError
 
-  const { url, segments } = getSegments(req, 'reports')
+  const { url, segments, badQuery } = getSegments(req, 'reports')
+  if (badQuery) return error('Parameter tidak valid', 400)
   const [action] = segments
 
   // GET /api/reports/export
