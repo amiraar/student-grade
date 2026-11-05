@@ -10,10 +10,7 @@ async function openExamForm(page, request) {
   await page.getByRole('radio', { name: /Tabel: jumlah benar/ }).waitFor()
 }
 
-const SCORE_TABLE_BUG = 'Known bug (ScoreRules.vue): new rows inherit the old top score, e.g. [0, 100, 100, 100]'
-
 test('table chosen before the key is typed: untouched values stay proportional', async ({ page, request }) => {
-  test.fail(true, SCORE_TABLE_BUG)
   await openExamForm(page, request)
   await page.getByRole('radio', { name: /Tabel: jumlah benar/ }).check()
   await expect(page.getByText('Isi kunci jawaban dulu.')).toBeVisible()
@@ -25,7 +22,6 @@ test('table chosen before the key is typed: untouched values stay proportional',
 })
 
 test('adding a question to an untouched table keeps it proportional', async ({ page, request }) => {
-  test.fail(true, SCORE_TABLE_BUG)
   await openExamForm(page, request)
   await page.getByLabel(/Kunci Pilihan Ganda/).fill('A,B')
   await page.getByRole('radio', { name: /Tabel: jumlah benar/ }).check()
@@ -36,7 +32,7 @@ test('adding a question to an untouched table keeps it proportional', async ({ p
   expect(await tableValues(page)).toEqual([0, 33.33, 66.67, 100])
 })
 
-test('removing a question from a table keeps the top score at 100', async ({ page, request }) => {
+test('removing a question from an untouched table keeps it proportional', async ({ page, request }) => {
   await openExamForm(page, request)
   await page.getByLabel(/Kunci Pilihan Ganda/).fill('A,B,C,D')
   await page.getByRole('radio', { name: /Tabel: jumlah benar/ }).check()
@@ -44,10 +40,10 @@ test('removing a question from a table keeps the top score at 100', async ({ pag
 
   await page.getByLabel(/Kunci Pilihan Ganda/).fill('A,B,C')
   await expect(page.getByLabel('Nilai jika benar 4')).toBeHidden()
-  expect(await tableValues(page)).toEqual([0, 25, 50, 100])
+  expect(await tableValues(page)).toEqual([0, 33.33, 66.67, 100])
 })
 
-test('a value the teacher typed survives adding a question', async ({ page, request }) => {
+test('a value the teacher typed survives adding a question, the others are recalculated', async ({ page, request }) => {
   await openExamForm(page, request)
   await page.getByLabel(/Kunci Pilihan Ganda/).fill('A,B,C')
   await page.getByRole('radio', { name: /Tabel: jumlah benar/ }).check()
@@ -55,7 +51,18 @@ test('a value the teacher typed survives adding a question', async ({ page, requ
 
   await page.getByLabel(/Kunci Pilihan Ganda/).fill('A,B,C,D')
   await expect(page.getByLabel('Nilai jika benar 4')).toHaveValue('100')
-  await expect(page.getByLabel('Nilai jika benar 1')).toHaveValue('40')
+  expect(await tableValues(page)).toEqual([0, 40, 50, 75, 100])
+})
+
+test('a value the teacher typed survives removing a question', async ({ page, request }) => {
+  await openExamForm(page, request)
+  await page.getByLabel(/Kunci Pilihan Ganda/).fill('A,B,C,D')
+  await page.getByRole('radio', { name: /Tabel: jumlah benar/ }).check()
+  await page.getByLabel('Nilai jika benar 1').fill('40')
+
+  await page.getByLabel(/Kunci Pilihan Ganda/).fill('A,B,C')
+  await expect(page.getByLabel('Nilai jika benar 4')).toBeHidden()
+  expect(await tableValues(page)).toEqual([0, 40, 66.67, 100])
 })
 
 test('the reset button restores proportional values', async ({ page, request }) => {
