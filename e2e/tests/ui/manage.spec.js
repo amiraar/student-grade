@@ -1,4 +1,4 @@
-import { test, expect, loginAs, selectWithOption } from './fixtures.js'
+import { test, expect, downloadText, loginAs, selectWithOption } from './fixtures.js'
 import { createClass, createExam, createStudent, newTeacher, scenario, answers, uid } from '../helpers.js'
 
 test('dashboard counts and recent exams come from the API', async ({ page, request }) => {
@@ -274,12 +274,8 @@ test('results and student history show the same score; filters work; CSV downloa
   await expect(page.getByText('Cici Rendah')).toBeVisible()
   await expect(page.getByText('Budi Tinggi')).toBeHidden()
 
-  const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Unduh CSV' }).click()])
+  const { download, text: csv } = await downloadText(page, () => page.getByRole('button', { name: 'Unduh CSV' }).click())
   expect(download.suggestedFilename()).toBe('hasil-ujian.csv')
-  const stream = await download.createReadStream()
-  const chunks = []
-  for await (const chunk of stream) chunks.push(chunk)
-  const csv = Buffer.concat(chunks).toString('utf8')
   expect(csv.charCodeAt(0)).toBe(0xfeff)
   expect(csv).toContain('Budi Tinggi')
   expect(csv).toContain('Cici Rendah')
@@ -302,11 +298,8 @@ test('reports: downloads the class report with the filters applied', async ({ pa
   await loginAs(page, token)
   await page.goto('/reports')
   await selectWithOption(page, 'Pilih kelas').selectOption({ label: 'Laporan B' })
-  const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Unduh Laporan CSV' }).click()])
+  const { download, text: csv } = await downloadText(page, () => page.getByRole('button', { name: 'Unduh Laporan CSV' }).click())
   expect(download.suggestedFilename()).toBe('laporan-kelas.csv')
-  const chunks = []
-  for await (const chunk of await download.createReadStream()) chunks.push(chunk)
-  const csv = Buffer.concat(chunks).toString('utf8')
   expect(csv).toContain('Anak B')
   expect(csv).not.toContain('Anak A')
 })

@@ -39,4 +39,27 @@ export async function loginAs(page, token) {
   }, token)
 }
 
-export const selectWithOption = (page, optionText) => page.locator('select').filter({ has: page.locator('option', { hasText: optionText }) })
+// Runs the click that starts a download and returns it with its text.
+//
+// An empty file was seen once in about a thousand runs and could not be reproduced, so the cause is
+// unknown. The size of the blob the page made tells a future failure apart: 0 means the app really
+// produced an empty file, more than 0 means the app delivered the data and only the read came up empty.
+export async function downloadText(page, click) {
+  await page.evaluate(() => {
+    window.__blobSizes = []
+    const original = URL.createObjectURL.bind(URL)
+    URL.createObjectURL = (blob) => {
+      window.__blobSizes.push(blob.size)
+      return original(blob)
+    }
+  })
+  const [download] = await Promise.all([page.waitForEvent('download'), click()])
+  const chunks = []
+  for await (const chunk of await download.createReadStream()) chunks.push(chunk)
+  const text = Buffer.concat(chunks).toString('utf8')
+  const blobSizes = await page.evaluate(() => window.__blobSizes)
+  expect(text.length, `downloaded file was empty; the page's blob sizes: [${blobSizes}]`).toBeGreaterThan(0)
+  return { download, text }
+}
+
+export const selectWithOption =(page, optionText) => page.locator('select').filter({ has: page.locator('option', { hasText: optionText }) })
