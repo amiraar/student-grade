@@ -147,4 +147,9 @@ const server = http.createServer(async (req, res) => {
   res.end('NOT_FOUND')
 })
 
+// Node closes an idle connection after about 6 seconds by default. A test that makes its next API
+// call at that moment, after a long browser step, then fails with ECONNRESET. Vercel's own server
+// is not involved here: this only keeps the harness from closing connections mid-test.
+server.keepAliveTimeout = 120_000
+
 server.listen(PORT, '127.0.0.1', () => console.log(`E2E harness on http://127.0.0.1:${PORT}`))
