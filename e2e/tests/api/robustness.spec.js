@@ -262,8 +262,6 @@ test.describe('student import', () => {
 })
 
 test.describe('auth input', () => {
-  test.fail(() => true, KNOWN_BUG)
-
   test('password that is not text', async ({ request }) => {
     const teacher = await newTeacher(request)
     expect4xx(await client(request).post('/auth/login', { email: teacher.email, password: 123456 }), 'login password=123456')
@@ -271,7 +269,16 @@ test.describe('auth input', () => {
   })
 
   test('email that is not an email address', async ({ request }) => {
-    expect4xx(await client(request).post('/auth/register', { name: 'A', email: `bukan-email-${uid()}`, password: 'rahasia1' }), 'register email')
+    for (const email of [`bukan-email-${uid()}`, `${uid()}@tanpa-titik`, `dua ${uid()}@e2e.test`, `@${uid()}.test`]) {
+      expect4xx(await client(request).post('/auth/register', { name: 'A', email, password: 'rahasia1' }), email)
+    }
+  })
+
+  test('login does not apply the email format check', async ({ request }) => {
+    // Older accounts may hold an address the check would refuse today, and they must still log in.
+    // 401 rather than 422 shows the lookup still runs for such an address.
+    const res = await client(request).post('/auth/login', { email: 'tidak-ada@tanpa-titik', password: 'rahasia1' })
+    expect(res.status).toBe(401)
   })
 
   test('text longer than the column', async ({ request }) => {
