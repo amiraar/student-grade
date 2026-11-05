@@ -19,8 +19,10 @@ test.describe('routing from vercel.json', () => {
   test('query parameters survive the rewrite', async ({ request }) => {
     const { api } = await newTeacher(request)
     const klass = (await api.post('/classes', { name: 'Q', academic_year: '2025/2026', semester: 1 })).body
-    const res = await api.get(`/classes/${klass.id}/report?exam_id=0`)
-    expect(res.status).toBe(200)
+    // Refused only if exam_id reaches the handler; a rewrite that dropped it would answer 200
+    const res = await api.get(`/classes/${klass.id}/report?exam_id=abc`)
+    expect(res.body.message).toBe('exam_id tidak valid')
+    expect((await api.get(`/classes/${klass.id}/report`)).status).toBe(200)
   })
 
   test('unknown API paths give 404 and not the SPA page', async ({ request }) => {

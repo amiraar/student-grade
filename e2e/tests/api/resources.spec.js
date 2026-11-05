@@ -43,6 +43,8 @@ test.describe('classes', () => {
     expect(page.body).toMatchObject({ total: 3, page: 2, per_page: 2, total_pages: 2 })
     expect(names(page)).toEqual(['Gamma'])
     expect((await api.get('/classes?per_page=99999')).body.per_page).toBe(200)
+    expect((await api.get('/classes?per_page=1.5')).body.per_page).toBe(1)
+    expect((await api.get('/classes?page=abc&per_page=abc')).body).toMatchObject({ page: 1, per_page: 20 })
   })
 
   test('SQL injection through search and sort has no effect', async ({ request }) => {

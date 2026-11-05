@@ -5,6 +5,7 @@ import { withPagination } from '../lib/pagination-response.js'
 import { json, error } from '../lib/response.js'
 import { normalizeAnswerKey, validateExamPayload } from '../lib/exam.js'
 import { csvResponse, csvNumber } from '../lib/csv.js'
+import { parseId } from '../lib/params.js'
 import { scoreAnswers } from '../lib/scoring.js'
 import { getSegments } from '../lib/route.js'
 
@@ -53,7 +54,9 @@ async function handler(req) {
         filters.push(`(LOWER(e.title) LIKE $${params.length} OR LOWER(e.subject) LIKE $${params.length})`)
       }
       if (classId) {
-        params.push(Number(classId))
+        const value = parseId(classId)
+        if (!value) return error('class_id tidak valid', 400)
+        params.push(value)
         filters.push(`e.class_id = $${params.length}`)
       }
       if (subject) {
@@ -127,8 +130,8 @@ async function handler(req) {
     return error('Method not allowed', 405)
   }
 
-  const id = Number(idSegment)
-  if (Number.isNaN(id)) return error('ID tidak valid', 400)
+  const id = parseId(idSegment)
+  if (!id) return error('ID tidak valid', 400)
 
   // GET /api/exams/:id/results/export
   if (sub === 'results' && sub2 === 'export') {

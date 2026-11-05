@@ -1,6 +1,7 @@
 import { requireAuth } from '../lib/middleware.js'
 import { query } from '../lib/db.js'
 import { csvResponse, csvNumber } from '../lib/csv.js'
+import { parseId, parseSemester } from '../lib/params.js'
 import { error } from '../lib/response.js'
 import { getSegments } from '../lib/route.js'
 
@@ -23,7 +24,9 @@ async function handler(req) {
     const params = [user.id]
 
     if (classId) {
-      params.push(Number(classId))
+      const value = parseId(classId)
+      if (!value) return error('class_id tidak valid', 400)
+      params.push(value)
       classFilters.push(`id = $${params.length}`)
     }
     if (academicYear) {
@@ -31,7 +34,9 @@ async function handler(req) {
       classFilters.push(`academic_year = $${params.length}`)
     }
     if (semester) {
-      params.push(Number(semester))
+      const value = parseSemester(semester)
+      if (!value) return error('Semester tidak valid', 400)
+      params.push(value)
       classFilters.push(`semester = $${params.length}`)
     }
 

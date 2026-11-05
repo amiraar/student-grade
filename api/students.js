@@ -3,6 +3,7 @@ import { query } from '../lib/db.js'
 import { getPagination } from '../lib/pagination.js'
 import { withPagination } from '../lib/pagination-response.js'
 import { decodeCsvInput, parseCsv } from '../lib/csv.js'
+import { parseId, parseSemester } from '../lib/params.js'
 import { json, error } from '../lib/response.js'
 import { getSegments } from '../lib/route.js'
 
@@ -42,7 +43,9 @@ async function handler(req) {
         filters.push(`(LOWER(s.name) LIKE $${params.length} OR LOWER(s.nis) LIKE $${params.length})`)
       }
       if (classId) {
-        params.push(Number(classId))
+        const value = parseId(classId)
+        if (!value) return error('class_id tidak valid', 400)
+        params.push(value)
         filters.push(`s.class_id = $${params.length}`)
       }
       if (academicYear) {
@@ -50,7 +53,9 @@ async function handler(req) {
         filters.push(`c.academic_year = $${params.length}`)
       }
       if (semester) {
-        params.push(Number(semester))
+        const value = parseSemester(semester)
+        if (!value) return error('Semester tidak valid', 400)
+        params.push(value)
         filters.push(`c.semester = $${params.length}`)
       }
 
@@ -178,8 +183,8 @@ async function handler(req) {
     return json({ message: `Import selesai: ${inserted} siswa ditambahkan, ${skipped} dilewati`, inserted, skipped })
   }
 
-  const id = Number(idSegment)
-  if (Number.isNaN(id)) return error('ID tidak valid', 400)
+  const id = parseId(idSegment)
+  if (!id) return error('ID tidak valid', 400)
 
   // GET /api/students/:id/results
   if (sub === 'results') {
@@ -196,7 +201,9 @@ async function handler(req) {
       filters.push(`c.academic_year = $${params.length}`)
     }
     if (semester) {
-      params.push(Number(semester))
+      const value = parseSemester(semester)
+      if (!value) return error('Semester tidak valid', 400)
+      params.push(value)
       filters.push(`c.semester = $${params.length}`)
     }
 

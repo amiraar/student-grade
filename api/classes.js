@@ -2,6 +2,7 @@ import { requireAuth } from '../lib/middleware.js'
 import { query } from '../lib/db.js'
 import { getPagination } from '../lib/pagination.js'
 import { withPagination } from '../lib/pagination-response.js'
+import { parseId, parseSemester } from '../lib/params.js'
 import { json, error } from '../lib/response.js'
 import { getSegments } from '../lib/route.js'
 
@@ -38,7 +39,9 @@ async function handler(req) {
         filters.push(`academic_year = $${params.length}`)
       }
       if (semester) {
-        params.push(Number(semester))
+        const value = parseSemester(semester)
+        if (!value) return error('Semester tidak valid', 400)
+        params.push(value)
         filters.push(`semester = $${params.length}`)
       }
 
@@ -86,8 +89,8 @@ async function handler(req) {
     return error('Method not allowed', 405)
   }
 
-  const id = Number(idSegment)
-  if (Number.isNaN(id)) return error('ID tidak valid', 400)
+  const id = parseId(idSegment)
+  if (!id) return error('ID tidak valid', 400)
 
   // GET /api/classes/:id/students
   if (sub === 'students') {
@@ -126,13 +129,15 @@ async function handler(req) {
     let rows = []
 
     if (examId) {
+      const examFilter = parseId(examId)
+      if (!examFilter) return error('exam_id tidak valid', 400)
       rows = await query(
         `SELECT s.id AS student_id, s.name AS student_name, r.score AS average_score
          FROM students s
          LEFT JOIN results r ON r.student_id = s.id AND r.exam_id = $2
          WHERE s.class_id = $1
          ORDER BY s.name ASC`,
-        [id, Number(examId)]
+        [id, examFilter]
       )
     } else {
       rows = await query(

@@ -24,8 +24,6 @@ const examBody = (classId, overrides = {}) => ({
 })
 
 test.describe('identifiers, filters and pagination', () => {
-  test.fail(() => true, KNOWN_BUG)
-
   for (const [label, path] of [
     ['decimal id', '/classes/1.5'],
     ['id beyond integer range', '/classes/99999999999'],
