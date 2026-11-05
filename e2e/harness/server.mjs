@@ -26,6 +26,7 @@ function geminiStub(init) {
   if (image === 'E2E_HTTP_500') return reply(500, { error: { message: 'stub failure' } })
   if (image === 'E2E_GARBAGE') return text('this is not json')
   if (image === 'E2E_UNREADABLE') return text(JSON.stringify({ readable: false, sheet_quality: 'blurry' }))
+  if (image === 'E2E_NULL') return text('null')
   if (image === 'E2E_BAD_SHAPE') return text(JSON.stringify({ readable: true, sheet_quality: 'good', pg: 'ABC', bs: [], mj: [] }))
   return text(
     JSON.stringify({

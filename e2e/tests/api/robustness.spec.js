@@ -198,14 +198,14 @@ test.describe('exam without questions', () => {
 })
 
 test.describe('grading input', () => {
-  test.fail(() => true, KNOWN_BUG)
-
   test('answers in the wrong shape', async ({ request }) => {
     const { api, exam, student } = await scenario(request)
     const grade = (answers) => api.post('/grade', { exam_id: exam.id, student_id: student.id, answers })
     expect4xx(await grade({ pg: 'ABC' }), 'answers.pg string')
     expect4xx(await grade({ pg: [null] }), 'answers.pg null item')
     expect4xx(await grade(['A']), 'answers array')
+    expect4xx(await grade({ pg: [{ no: 1, jawaban: { a: 1 } }] }), 'jawaban object')
+    expect((await api.get(`/exams/${exam.id}/results`)).body.data).toEqual([])
   })
 
   test('identifiers that are not whole numbers', async ({ request }) => {
@@ -224,8 +224,11 @@ test.describe('grading input', () => {
 
   test('AI reply in the wrong shape is reported and nothing is saved', async ({ request }) => {
     const { api, exam, student } = await scenario(request)
-    const res = await api.post('/grade', { exam_id: exam.id, student_id: student.id, image: 'E2E_BAD_SHAPE' })
-    expect4xx(res, 'AI pg string')
+    for (const image of ['E2E_BAD_SHAPE', 'E2E_NULL']) {
+      const res = await api.post('/grade', { exam_id: exam.id, student_id: student.id, image })
+      expect4xx(res, image)
+      expect(res.body?.message).toBe('Hasil AI tidak bisa dibaca. Coba foto ulang.')
+    }
     expect((await api.get(`/exams/${exam.id}/results`)).body.data).toEqual([])
   })
 })
