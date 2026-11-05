@@ -1,11 +1,6 @@
-// The list must show the result of the latest search, even when an older request answers later.
-//
-// Known bug: the pages do not ignore outdated responses, so these fail today. test.fail keeps the
-// suite usable as a regression gate; once fixed they report "Expected to fail, but passed".
-import { test, expect, loginAs } from './fixtures.js'
+// A page must show the result of the latest request, even when an older one answers later.
+import { test, expect, loginAs, selectWithOption } from './fixtures.js'
 import { createClass, createExam, createStudent, answers, newTeacher } from '../helpers.js'
-
-test.fail(() => true, 'Known bug: an outdated search response overwrites the newer one')
 
 const STALE = 'tidak-ada-yang-cocok'
 
@@ -65,4 +60,53 @@ test('exam results page', async ({ page, request }) => {
   await expect(page.getByText('Alfa')).toBeVisible()
   await searchWithSlowFirstRequest(page, `/api/exams/${exam.id}/results`, page.getByPlaceholder('Cari siswa'), 'alfa')
   await expect(page.getByText('Alfa')).toBeVisible()
+})
+
+const delay = (route) => new Promise((done) => setTimeout(done, 700)).then(() => route.fallback())
+
+test('grade page: switching exam keeps the key of the exam now selected', async ({ page, request }) => {
+  const { api, token } = await newTeacher(request)
+  const klass = await createClass(api)
+  const student = await createStudent(api, klass.id)
+  const first = await createExam(api, klass.id, { title: 'Satu Soal', answer_key: { pg: [{ no: 1, answer: 'A' }] } })
+  const second = await createExam(api, klass.id, { title: 'Lima Soal' })
+  await loginAs(page, token)
+  await page.goto('/grade')
+  await selectWithOption(page, '1. Pilih kelas').selectOption({ label: klass.name })
+
+  await page.route(`**/api/exams/${first.id}`, delay)
+  await page.route(`**/api/exams/${first.id}/results?*`, delay)
+  const stale = page.waitForResponse((r) => new URL(r.url()).pathname === `/api/exams/${first.id}`)
+  const exam = selectWithOption(page, '2. Pilih ujian')
+  await exam.selectOption({ label: `${first.title} · ${first.exam_date}` })
+  await exam.selectOption({ label: `${second.title} · ${second.exam_date}` })
+  await stale
+  await page.waitForTimeout(200)
+
+  await selectWithOption(page, 'Pilih siswa untuk diperiksa').selectOption({ label: `${student.name} — belum dinilai` })
+  await expect(page.getByLabel('Jawaban Pilihan Ganda nomor 5')).toBeVisible()
+})
+
+test('grade page: switching class keeps the exams of the class now selected', async ({ page, request }) => {
+  const { api, token } = await newTeacher(request)
+  const firstClass = await createClass(api)
+  const secondClass = await createClass(api)
+  const firstExam = await createExam(api, firstClass.id, { title: 'Ujian Kelas Pertama' })
+  const secondExam = await createExam(api, secondClass.id, { title: 'Ujian Kelas Kedua' })
+  await loginAs(page, token)
+  await page.goto('/grade')
+
+  const slow = (route) => (new URL(route.request().url()).searchParams.get('class_id') === String(firstClass.id) ? delay(route) : route.fallback())
+  await page.route('**/api/exams?*', slow)
+  await page.route('**/api/students?*', slow)
+  const stale = page.waitForResponse((r) => r.url().includes('/api/exams?') && r.url().includes(`class_id=${firstClass.id}`))
+  const klass = selectWithOption(page, '1. Pilih kelas')
+  await klass.selectOption({ label: firstClass.name })
+  await klass.selectOption({ label: secondClass.name })
+  await stale
+  await page.waitForTimeout(200)
+
+  const options = page.locator('option')
+  await expect(options.filter({ hasText: secondExam.title })).toHaveCount(1)
+  await expect(options.filter({ hasText: firstExam.title })).toHaveCount(0)
 })

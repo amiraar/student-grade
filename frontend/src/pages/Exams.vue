@@ -2,7 +2,9 @@
 import { computed, onMounted, ref } from 'vue'
 import ScoreRules from '../components/ScoreRules.vue'
 import api, { errorMessage } from '../lib/api.js'
+import { latestRequest } from '../lib/latest.js'
 
+const trackLoad = latestRequest()
 const exams = ref([])
 const classes = ref([])
 const search = ref('')
@@ -25,6 +27,7 @@ const form = ref({
 })
 
 const load = async () => {
+  const isNewest = trackLoad()
   const [examsRes, classesRes] = await Promise.all([
     api.get('/exams', {
       params: {
@@ -35,6 +38,7 @@ const load = async () => {
     }),
     api.get('/classes?per_page=200')
   ])
+  if (!isNewest()) return
   exams.value = examsRes.data.data
   classes.value = classesRes.data.data
 }

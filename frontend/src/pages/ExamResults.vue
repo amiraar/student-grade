@@ -2,7 +2,9 @@
 import { onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import api, { downloadFile, errorMessage } from '../lib/api.js'
+import { latestRequest } from '../lib/latest.js'
 
+const trackLoad = latestRequest()
 const route = useRoute()
 const examId = route.params.id
 const results = ref([])
@@ -11,12 +13,14 @@ const grade = ref('')
 const error = ref('')
 
 const load = async () => {
+  const isNewest = trackLoad()
   const res = await api.get(`/exams/${examId}/results`, {
     params: {
       search: search.value,
       grade: grade.value || undefined
     }
   })
+  if (!isNewest()) return
   results.value = res.data.data
 }
 

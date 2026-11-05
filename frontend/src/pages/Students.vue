@@ -1,7 +1,9 @@
 <script setup>
 import { onMounted, ref } from 'vue'
 import api, { errorMessage } from '../lib/api.js'
+import { latestRequest } from '../lib/latest.js'
 
+const trackLoad = latestRequest()
 const students = ref([])
 const classes = ref([])
 const search = ref('')
@@ -16,6 +18,7 @@ const message = ref({ type: '', text: '' })
 const importMessage = ref({ type: '', text: '' })
 
 const load = async () => {
+  const isNewest = trackLoad()
   const [studentsRes, classesRes] = await Promise.all([
     api.get('/students', {
       params: {
@@ -27,6 +30,7 @@ const load = async () => {
     }),
     api.get('/classes?per_page=200')
   ])
+  if (!isNewest()) return
   students.value = studentsRes.data.data
   classes.value = classesRes.data.data
 }
