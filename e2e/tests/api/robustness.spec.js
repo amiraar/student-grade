@@ -155,8 +155,6 @@ test.describe('class and student fields', () => {
 })
 
 test.describe('exam fields', () => {
-  test.fail(() => true, KNOWN_BUG)
-
   test('invalid date', async ({ request }) => {
     const { api, klass, exam } = await scenario(request)
     expect4xx(await api.post('/exams', examBody(klass.id, { exam_date: 'bukan-tanggal' })), 'POST bad date')

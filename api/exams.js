@@ -6,7 +6,7 @@ import { withPagination } from '../lib/pagination-response.js'
 import { json, error } from '../lib/response.js'
 import { normalizeAnswerKey, validateExamPayload } from '../lib/exam.js'
 import { csvResponse, csvNumber } from '../lib/csv.js'
-import { parseId } from '../lib/params.js'
+import { isValidDate, parseId, textError } from '../lib/params.js'
 import { scoreAnswers } from '../lib/scoring.js'
 import { getSegments } from '../lib/route.js'
 
@@ -15,6 +15,11 @@ const resultsSortable = new Set(['score', 'graded_at'])
 // exam_date as 'YYYY-MM-DD' text; the driver would otherwise turn DATE into a full timestamp
 const examColumns = `e.id, e.class_id, e.title, e.subject, to_char(e.exam_date, 'YYYY-MM-DD') AS exam_date,
   e.answer_key, e.weights, e.created_at, e.updated_at`
+
+const examFieldError = (title, subject, examDate) =>
+  textError(title, 'Judul', 255) ||
+  textError(subject, 'Mata pelajaran', 255) ||
+  (isValidDate(examDate) ? null : 'Tanggal ujian tidak valid')
 
 async function getExam(id, teacherId) {
   const rows = await query(
@@ -107,11 +112,12 @@ async function handler(req) {
       if (!class_id || !title || !subject || !exam_date || !answer_key || !weights) {
         return error('Data ujian tidak lengkap', 400)
       }
+      const classId = parseId(class_id)
+      if (!classId) return error('class_id tidak valid', 400)
+      const invalid = examFieldError(title, subject, exam_date)
+      if (invalid) return error(invalid, 422)
 
-      const classes = await query('SELECT id FROM classes WHERE id = $1 AND teacher_id = $2', [
-        Number(class_id),
-        user.id
-      ])
+      const classes = await query('SELECT id FROM classes WHERE id = $1 AND teacher_id = $2', [classId, user.id])
       if (!classes.length) return error('Kelas tidak ditemukan', 404)
 
       const { keyErrors, weightError } = validateExamPayload(answer_key, weights)
@@ -123,7 +129,7 @@ async function handler(req) {
         `INSERT INTO exams (class_id, title, subject, exam_date, answer_key, weights)
          VALUES ($1, $2, $3, $4, $5, $6)
          RETURNING id`,
-        [Number(class_id), title, subject, exam_date, JSON.stringify(normalizedKey), JSON.stringify(weights)]
+        [classId, title, subject, exam_date, JSON.stringify(normalizedKey), JSON.stringify(weights)]
       )
 
       return json(await getExam(rows[0].id, user.id), 201)
@@ -244,6 +250,10 @@ async function handler(req) {
       return error('Body request tidak valid', 400)
     }
     const { title, subject, exam_date, answer_key, weights } = body || {}
+
+    // Fields left out keep their value
+    const invalid = examFieldError(title || existing.title, subject || existing.subject, exam_date || existing.exam_date)
+    if (invalid) return error(invalid, 422)
 
     if (answer_key || weights) {
       const { keyErrors, weightError } = validateExamPayload(
