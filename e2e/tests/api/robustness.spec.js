@@ -96,8 +96,6 @@ test.describe('text the database cannot store', () => {
 })
 
 test.describe('class and student fields', () => {
-  test.fail(() => true, KNOWN_BUG)
-
   test('class: semester out of range', async ({ request }) => {
     const { api } = await newTeacher(request)
     const klass = await createClass(api)
@@ -117,6 +115,19 @@ test.describe('class and student fields', () => {
   test('class: text that is not text', async ({ request }) => {
     const { api } = await newTeacher(request)
     expect4xx(await api.post('/classes', { name: { a: 1 }, academic_year: '2025/2026', semester: 1 }), 'name object')
+  })
+
+  test('refused values leave the class and student unchanged, and a partial update still works', async ({ request }) => {
+    const { api, klass, student } = await scenario(request)
+    await api.put(`/classes/${klass.id}`, { semester: 9 })
+    await api.put(`/students/${student.id}`, { nis: 'x'.repeat(51) })
+    expect((await api.get(`/classes/${klass.id}`)).body.semester).toBe(klass.semester)
+    expect((await api.get(`/students/${student.id}`)).body.nis).toBe(student.nis)
+
+    const renamed = await api.put(`/classes/${klass.id}`, { semester: '2' })
+    expect(renamed.body).toMatchObject({ name: klass.name, semester: 2 })
+    const moved = await api.put(`/students/${student.id}`, { name: 'Nama Baru' })
+    expect(moved.body).toMatchObject({ name: 'Nama Baru', nis: student.nis })
   })
 
   test('student: text longer than the column', async ({ request }) => {

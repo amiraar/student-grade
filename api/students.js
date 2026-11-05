@@ -4,11 +4,13 @@ import { query } from '../lib/db.js'
 import { getPagination } from '../lib/pagination.js'
 import { withPagination } from '../lib/pagination-response.js'
 import { decodeCsvInput, parseCsv } from '../lib/csv.js'
-import { parseId, parseSemester } from '../lib/params.js'
+import { parseId, parseSemester, textError } from '../lib/params.js'
 import { json, error } from '../lib/response.js'
 import { getSegments } from '../lib/route.js'
 
 const sortable = new Set(['name', 'nis', 'created_at'])
+
+const studentFieldError = (name, nis) => textError(name, 'Nama siswa', 255) || textError(nis, 'NIS', 50)
 
 async function getStudent(id, teacherId) {
   const rows = await query(
@@ -100,11 +102,12 @@ async function handler(req) {
       }
       const { class_id, name, nis } = body || {}
       if (!class_id || !name || !nis) return error('class_id, nama, dan NIS wajib diisi', 400)
+      const classId = parseId(class_id)
+      if (!classId) return error('class_id tidak valid', 400)
+      const invalid = studentFieldError(name, nis)
+      if (invalid) return error(invalid, 422)
 
-      const classes = await query('SELECT id FROM classes WHERE id = $1 AND teacher_id = $2', [
-        Number(class_id),
-        user.id
-      ])
+      const classes = await query('SELECT id FROM classes WHERE id = $1 AND teacher_id = $2', [classId, user.id])
       if (!classes.length) return error('Kelas tidak ditemukan', 404)
 
       let rows
@@ -113,7 +116,7 @@ async function handler(req) {
           `INSERT INTO students (class_id, name, nis)
            VALUES ($1, $2, $3)
            RETURNING *`,
-          [Number(class_id), name, nis]
+          [classId, name, nis]
         )
       } catch (err) {
         if (err?.code === '23505') return error('NIS sudah terdaftar', 409)
@@ -258,23 +261,31 @@ async function handler(req) {
     }
     const { name, nis, class_id } = body || {}
 
+    // Fields left out keep their value
+    const invalid = studentFieldError(name || data.name, nis || data.nis)
+    if (invalid) return error(invalid, 422)
+
     let targetClassId = data.class_id
     if (class_id) {
-      const classes = await query('SELECT id FROM classes WHERE id = $1 AND teacher_id = $2', [
-        Number(class_id),
-        user.id
-      ])
+      targetClassId = parseId(class_id)
+      if (!targetClassId) return error('class_id tidak valid', 400)
+      const classes = await query('SELECT id FROM classes WHERE id = $1 AND teacher_id = $2', [targetClassId, user.id])
       if (!classes.length) return error('Kelas tidak ditemukan', 404)
-      targetClassId = Number(class_id)
     }
 
-    const rows = await query(
-      `UPDATE students
-       SET name = $1, nis = $2, class_id = $3, updated_at = NOW()
-       WHERE id = $4
-       RETURNING *`,
-      [name || data.name, nis || data.nis, targetClassId, id]
-    )
+    let rows
+    try {
+      rows = await query(
+        `UPDATE students
+         SET name = $1, nis = $2, class_id = $3, updated_at = NOW()
+         WHERE id = $4
+         RETURNING *`,
+        [name || data.name, nis || data.nis, targetClassId, id]
+      )
+    } catch (err) {
+      if (err?.code === '23505') return error('NIS sudah terdaftar', 409)
+      throw err
+    }
 
     return json(rows[0])
   }

@@ -3,11 +3,16 @@ import { requireAuth } from '../lib/middleware.js'
 import { query } from '../lib/db.js'
 import { getPagination } from '../lib/pagination.js'
 import { withPagination } from '../lib/pagination-response.js'
-import { parseId, parseSemester } from '../lib/params.js'
+import { parseId, parseSemester, textError } from '../lib/params.js'
 import { json, error } from '../lib/response.js'
 import { getSegments } from '../lib/route.js'
 
 const sortable = new Set(['name', 'academic_year', 'semester', 'created_at'])
+
+const classFieldError = (name, academicYear, semester) =>
+  textError(name, 'Nama kelas', 100) ||
+  textError(academicYear, 'Tahun ajaran', 20) ||
+  (parseSemester(semester) ? null : 'Semester harus 1 atau 2')
 
 async function getClass(id, teacherId) {
   const rows = await query('SELECT * FROM classes WHERE id = $1 AND teacher_id = $2', [id, teacherId])
@@ -77,12 +82,14 @@ async function handler(req) {
       if (!name || !academic_year || !semester) {
         return error('Nama, tahun ajaran, dan semester wajib diisi', 400)
       }
+      const invalid = classFieldError(name, academic_year, semester)
+      if (invalid) return error(invalid, 422)
 
       const rows = await query(
         `INSERT INTO classes (teacher_id, name, academic_year, semester)
          VALUES ($1, $2, $3, $4)
          RETURNING *`,
-        [user.id, name, academic_year, Number(semester)]
+        [user.id, name, academic_year, parseSemester(semester)]
       )
 
       return json(rows[0], 201)
@@ -175,12 +182,16 @@ async function handler(req) {
     const existing = await getClass(id, user.id)
     if (!existing) return error('Kelas tidak ditemukan', 404)
 
+    // Fields left out keep their value
+    const invalid = classFieldError(name || existing.name, academic_year || existing.academic_year, semester || existing.semester)
+    if (invalid) return error(invalid, 422)
+
     const rows = await query(
       `UPDATE classes
        SET name = $1, academic_year = $2, semester = $3, updated_at = NOW()
        WHERE id = $4
        RETURNING *`,
-      [name || existing.name, academic_year || existing.academic_year, semester || existing.semester, id]
+      [name || existing.name, academic_year || existing.academic_year, parseSemester(semester || existing.semester), id]
     )
 
     return json(rows[0])
