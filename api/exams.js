@@ -23,7 +23,7 @@ const examFieldError = (title, subject, examDate) =>
 
 async function getExam(id, teacherId) {
   const rows = await query(
-    `SELECT ${examColumns}
+    `SELECT ${examColumns}, c.name AS class_name
      FROM exams e
      JOIN classes c ON c.id = e.class_id
      WHERE e.id = $1 AND c.teacher_id = $2`,
