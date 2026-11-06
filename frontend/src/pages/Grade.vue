@@ -1,5 +1,6 @@
 <script setup>
-import { computed, ref, watch, onMounted } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { onBeforeRouteLeave } from 'vue-router'
 import api, { errorMessage as getError } from '../lib/api.js'
 import { latestRequest } from '../lib/latest.js'
 import { countsFromKey } from '../lib/sheet.js'
@@ -28,23 +29,68 @@ const fileInput = ref(null)
 const busy = ref('')
 const errorMessage = ref('')
 const batch = ref([]) // one row per uploaded photo
-const review = ref(null) // { studentId, items, score, grade, source }
+const review = ref(null) // { studentId, items, snapshot, score, grade, source, saved }
 
 const studentName = (id) => students.value.find((s) => s.id === id)?.name || `Siswa #${id}`
 const gradedCount = computed(() => students.value.filter((s) => results.value[s.id]).length)
+const cleanAnswer = (answer) => String(answer || '-').trim().toUpperCase() || '-'
 const reviewAnswers = (items) =>
-  Object.fromEntries(Object.keys(SECTIONS).map((sec) => [sec, items[sec].map((item) => ({ no: item.no, jawaban: String(item.answer || '-').trim().toUpperCase() || '-' }))]))
+  Object.fromEntries(Object.keys(SECTIONS).map((sec) => [sec, items[sec].map((item) => ({ no: item.no, jawaban: cleanAnswer(item.answer) }))]))
 const preview = computed(() => (review.value && exam.value ? scoreAnswers(reviewAnswers(review.value.items), exam.value.answer_key, exam.value.weights) : null))
 const totalQuestions = computed(() => (review.value ? Object.values(review.value.items).flat().length : 0))
 const flaggedCount = computed(() => (review.value ? Object.values(review.value.items).flat().filter((i) => i.ragu).length : 0))
+const isDirty = computed(() => Boolean(review.value) && JSON.stringify(reviewAnswers(review.value.items)) !== review.value.snapshot)
+
+const saveStatus = computed(() => {
+  const r = review.value
+  if (!r || !preview.value) return null
+  if (r.score === null) return { unsaved: true, text: 'Belum disimpan. Isi jawaban siswa lalu klik Simpan.' }
+  if (preview.value.score !== r.score) return { unsaved: true, text: `Berubah dari ${r.score}, belum disimpan.` }
+  if (isDirty.value) return { unsaved: true, text: 'Ada perubahan, belum disimpan.' }
+  return r.saved ? { unsaved: false, text: 'Tersimpan.' } : null
+})
+
+const okToLeave = () => !isDirty.value || window.confirm(`Jawaban ${studentName(review.value.studentId)} belum disimpan. Pindah tanpa menyimpan?`)
+
+// Changing a selection asks first when answers are unsaved; cancelling puts the selection back.
+// The selection is put back after the tick, once the dropdown accepts a new value from the page.
+function guardedWatch(source, onChange) {
+  let reverting = false
+  watch(source, (value, old) => {
+    if (reverting) {
+      reverting = false
+      return
+    }
+    if (!okToLeave()) {
+      nextTick(() => {
+        reverting = true
+        source.value = old
+      })
+      return
+    }
+    // The answers were given up, so the selections that follow do not ask again
+    if (isDirty.value) review.value = null
+    onChange(value)
+  })
+}
+
+const warnBeforeUnload = (event) => {
+  if (!isDirty.value) return
+  event.preventDefault()
+  event.returnValue = ''
+}
+
+onBeforeRouteLeave(() => okToLeave())
+onBeforeUnmount(() => window.removeEventListener('beforeunload', warnBeforeUnload))
 
 onMounted(async () => {
+  window.addEventListener('beforeunload', warnBeforeUnload)
   const res = await api.get('/classes?per_page=200')
   classes.value = res.data.data
 })
 
 const trackClass = latestRequest()
-watch(classId, async () => {
+guardedWatch(classId, async () => {
   const isNewest = trackClass()
   examId.value = ''
   students.value = []
@@ -60,7 +106,7 @@ watch(classId, async () => {
 })
 
 const trackExam = latestRequest()
-watch(examId, async () => {
+guardedWatch(examId, async () => {
   const isNewest = trackExam()
   exam.value = null
   results.value = {}
@@ -78,12 +124,19 @@ watch(examId, async () => {
 })
 
 // Selecting a student opens their saved answers (or an empty table) for checking / manual input
-watch(studentId, (id) => {
+guardedWatch(studentId, (id) => {
   errorMessage.value = ''
-  if (!id) return (review.value = null)
-  const saved = results.value[id]
-  openReview(id, saved?.answers || {}, saved ? { score: Number(saved.score), grade: saved.grade, source: saved.sheet_quality } : {})
+  if (!id) {
+    review.value = null
+    return
+  }
+  openStudent(id)
 })
+
+function openStudent(id, extra = {}) {
+  const saved = results.value[id]
+  openReview(id, saved?.answers || {}, { ...(saved ? { score: Number(saved.score), grade: saved.grade, source: saved.sheet_quality } : {}), ...extra })
+}
 
 // Editable answer table; colours and score come from `preview`
 function openReview(id, answers, extra) {
@@ -97,7 +150,7 @@ function openReview(id, answers, extra) {
         return { no: Number(k.no), key: k.answer, answer, ragu: Boolean(a?.ragu) }
       })
   }
-  review.value = { studentId: id, items, score: null, grade: null, source: null, ...extra }
+  review.value = { studentId: id, items, snapshot: JSON.stringify(reviewAnswers(items)), score: null, grade: null, source: null, saved: false, ...extra }
 }
 
 async function save(id, answers, payload = {}) {
@@ -180,8 +233,8 @@ async function gradeWithAi(file) {
 }
 
 function showStudent(id) {
-  if (studentId.value === id) openReview(id, results.value[id].answers, { score: Number(results.value[id].score), grade: results.value[id].grade, source: results.value[id].sheet_quality })
-  else studentId.value = id
+  if (studentId.value !== id) studentId.value = id
+  else if (okToLeave()) openStudent(id)
 }
 
 async function saveReview() {
@@ -232,6 +285,7 @@ function nextStudent() {
         </select>
       </div>
       <p v-if="classId && !exams.length" class="mt-2 text-sm text-amber-700">Kelas ini belum punya ujian. Buat ujian dulu di menu Ujian.</p>
+      <p v-if="errorMessage && !review" class="mt-2 text-sm text-red-600">{{ errorMessage }}</p>
 
       <div v-if="exam" class="mt-4 space-y-3">
         <div class="flex flex-col gap-2 text-sm text-slate-600 sm:flex-row sm:items-center sm:justify-between">
@@ -266,30 +320,19 @@ function nextStudent() {
             {{ item.name }}{{ results[item.id] ? ` — ${Number(results[item.id].score)}` : ' — belum dinilai' }}
           </option>
         </select>
-        <p v-if="errorMessage" class="text-sm text-red-600">{{ errorMessage }}</p>
       </div>
     </section>
 
     <section v-if="review" class="card p-4 md:p-8">
-      <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-        <div>
-          <h2 class="text-xl font-semibold">{{ studentName(review.studentId) }}</h2>
-          <p class="text-2xl font-semibold">Nilai: {{ preview.score }} ({{ preview.grade }})</p>
-          <p class="text-sm text-slate-600">Benar {{ preview.correct }} dari {{ totalQuestions }} soal</p>
-          <p v-if="review.score === null" class="text-sm text-amber-700">Belum disimpan. Isi jawaban siswa lalu klik Simpan.</p>
-          <p v-else-if="preview.score !== review.score" class="text-sm text-amber-700">Berubah dari {{ review.score }}, belum disimpan.</p>
-          <p v-if="review.source" class="text-xs text-slate-500">Sumber: {{ SOURCE[review.source] || review.source }}</p>
-          <p v-if="review.saved" class="text-sm text-emerald-700">Tersimpan.</p>
-          <p v-if="flaggedCount" class="mt-1 text-sm text-amber-800">
-            {{ flaggedCount }} jawaban ditandai <b>?</b> (tanda tipis / terhapus / ganda). Cocokkan dengan kertasnya.
-          </p>
-        </div>
-        <div class="flex flex-wrap gap-2">
-          <button class="btn" :disabled="Boolean(busy)" @click="saveReview">Simpan</button>
-          <button class="btn-ghost" :disabled="Boolean(busy)" @click="nextStudent">Siswa berikutnya →</button>
-        </div>
-      </div>
-      <p class="mt-2 text-xs text-slate-500">Isi "-" untuk kosong, "!!" untuk jawaban ganda.</p>
+      <h2 class="text-xl font-semibold">{{ studentName(review.studentId) }}</h2>
+      <p class="text-2xl font-semibold">Nilai: {{ preview.score }} ({{ preview.grade }})</p>
+      <p class="text-sm text-slate-600">Benar {{ preview.correct }} dari {{ totalQuestions }} soal</p>
+      <p v-if="review.source" class="text-xs text-slate-500">Sumber: {{ SOURCE[review.source] || review.source }}</p>
+      <p v-if="flaggedCount" class="mt-1 text-sm text-amber-800">
+        {{ flaggedCount }} jawaban ditandai <b>?</b> (tanda tipis / terhapus / ganda). Cocokkan dengan kertasnya.
+      </p>
+
+      <p class="mt-4 text-xs text-slate-500">Isi "-" untuk kosong, "!!" untuk jawaban ganda.</p>
       <div class="mt-4 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
         <div v-for="(label, sec) in SECTIONS" :key="sec" v-show="review.items[sec]?.length">
           <h3 class="mb-2 font-semibold">
@@ -316,6 +359,19 @@ function nextStudent() {
               </tr>
             </tbody>
           </table>
+        </div>
+      </div>
+
+      <!-- Stays on screen while a long answer table is scrolled -->
+      <div class="sticky bottom-0 z-10 -mx-4 -mb-4 mt-4 flex flex-col gap-2 rounded-b-[20px] border-t border-slate-200 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between md:-mx-8 md:-mb-8 md:px-8">
+        <div class="min-w-0 text-sm" role="status">
+          <p v-if="errorMessage" class="text-red-600">{{ errorMessage }}</p>
+          <p v-if="saveStatus" :class="saveStatus.unsaved ? 'text-amber-700' : 'text-emerald-700'">{{ saveStatus.text }}</p>
+          <p v-if="busy" class="text-slate-700">{{ busy }}</p>
+        </div>
+        <div class="flex shrink-0 gap-2">
+          <button class="btn flex-1 sm:flex-none" :disabled="Boolean(busy)" @click="saveReview">Simpan</button>
+          <button class="btn-ghost flex-1 sm:flex-none" :disabled="Boolean(busy)" @click="nextStudent">Siswa berikutnya →</button>
         </div>
       </div>
     </section>
