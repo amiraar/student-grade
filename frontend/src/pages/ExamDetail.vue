@@ -12,7 +12,7 @@ const exam = ref(null)
 const form = ref(null)
 const message = ref({ type: '', text: '' })
 
-const flattenAnswers = (section) => (section || []).map((item) => item.answer).join(', ')
+const flattenAnswers = (section) => (section || []).map((item) => item.answer).join('')
 
 const load = async () => {
   const res = await api.get(`/exams/${examId}`)
