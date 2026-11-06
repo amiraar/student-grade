@@ -1,6 +1,6 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { onBeforeRouteLeave } from 'vue-router'
+import { onBeforeRouteLeave, useRoute } from 'vue-router'
 import api, { errorMessage as getError } from '../lib/api.js'
 import { ANSWER_HELP } from '../lib/answerKey.js'
 import { latestRequest } from '../lib/latest.js'
@@ -20,7 +20,9 @@ const STATUS_CLASS = {
   double: 'bg-amber-50 text-amber-800'
 }
 
+const route = useRoute()
 const classes = ref([])
+const classesLoaded = ref(false)
 const students = ref([])
 const exams = ref([])
 const exam = ref(null) // selected exam with answer key
@@ -33,6 +35,8 @@ const busy = ref('')
 const errorMessage = ref('')
 const batch = ref([]) // one row per uploaded photo
 const review = ref(null) // { studentId, items, quick, snapshot, score, grade, source, saved }
+// From a link such as /grade?exam=1&student=2: applied once the lists they belong to are loaded
+const linked = { exam: null, student: null }
 
 const studentName = (id) => students.value.find((s) => s.id === id)?.name || `Siswa #${id}`
 const gradedCount = computed(() => students.value.filter((s) => results.value[s.id]).length)
@@ -102,6 +106,18 @@ onMounted(async () => {
   window.addEventListener('beforeunload', warnBeforeUnload)
   const res = await api.get('/classes?per_page=200')
   classes.value = res.data.data
+  classesLoaded.value = true
+
+  const examFromLink = Number(route.query.exam)
+  if (!examFromLink) return
+  try {
+    const examRes = await api.get(`/exams/${examFromLink}`)
+    linked.exam = examRes.data.id
+    linked.student = Number(route.query.student) || null
+    classId.value = examRes.data.class_id
+  } catch (err) {
+    errorMessage.value = getError(err, 'Ujian tidak ditemukan.')
+  }
 })
 
 const trackClass = latestRequest()
@@ -118,6 +134,10 @@ guardedWatch(classId, async () => {
   if (!isNewest()) return
   students.value = studentsRes.data.data
   exams.value = examsRes.data.data
+  if (linked.exam) {
+    examId.value = linked.exam
+    linked.exam = null
+  }
 })
 
 const trackExam = latestRequest()
@@ -136,6 +156,8 @@ guardedWatch(examId, async () => {
   if (!isNewest()) return
   exam.value = examRes.data
   results.value = Object.fromEntries(resultsRes.data.data.map((r) => [r.student_id, r]))
+  if (linked.student && students.value.some((s) => s.id === linked.student)) studentId.value = linked.student
+  linked.student = null
 })
 
 // Selecting a student opens their saved answers (or an empty table) for checking / manual input
@@ -353,6 +375,9 @@ function nextStudent() {
   <div class="space-y-6 fade-in">
     <section class="card p-4 md:p-8">
       <h1 class="section-title mb-4">Koreksi Lembar Jawaban</h1>
+      <p v-if="classesLoaded && !classes.length" class="mb-3 text-sm text-amber-700">
+        Belum ada kelas. Buat dulu di menu <RouterLink to="/classes" class="font-semibold underline">Kelas</RouterLink>.
+      </p>
       <div class="grid gap-3 md:grid-cols-2">
         <select v-model="classId" class="input">
           <option value="">1. Pilih kelas</option>
@@ -367,6 +392,9 @@ function nextStudent() {
       <p v-if="errorMessage && !review" class="mt-2 text-sm text-red-600">{{ errorMessage }}</p>
 
       <div v-if="exam" class="mt-4 space-y-3">
+        <p v-if="!students.length" class="text-sm text-amber-700">
+          Kelas ini belum punya siswa. Tambah dulu di menu <RouterLink to="/students" class="font-semibold underline">Siswa</RouterLink>.
+        </p>
         <div class="flex flex-col gap-2 text-sm text-slate-600 sm:flex-row sm:items-center sm:justify-between">
           <p>Sudah dinilai: <b>{{ gradedCount }}</b> dari {{ students.length }} siswa</p>
           <RouterLink :to="`/exams/${exam.id}/sheet?student=all`" class="btn-ghost">Cetak lembar jawaban</RouterLink>
