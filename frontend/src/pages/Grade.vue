@@ -168,16 +168,31 @@ function openReview(id, answers, extra) {
   review.value = { studentId: id, items, quick: { pg: '', bs: '', mj: '' }, snapshot: JSON.stringify(reviewAnswers(items)), score: null, grade: null, source: null, saved: false, ...extra }
 }
 
+const remember = (id, data) => {
+  results.value = { ...results.value, [id]: { student_id: id, score: data.score, grade: data.grade, answers: data.answers, sheet_quality: data.sheet_quality } }
+}
+
 async function save(id, answers, payload = {}) {
   const res = await api.post('/grade', { exam_id: examId.value, student_id: id, answers, ...payload })
-  results.value = { ...results.value, [id]: { student_id: id, score: res.data.score, grade: res.data.grade, answers: res.data.answers, sheet_quality: res.data.sheet_quality } }
+  remember(id, res.data)
   return res.data
 }
 
-// Photos of the printed template: read in the browser, student found from the printed ID
+// A photo read while a student is open may have changed that student's score
+const refreshOpenStudent = () => {
+  if (review.value && !isDirty.value) openStudent(review.value.studentId)
+}
+
+// Photos of the printed template: read in the browser, student found from the printed ID.
+// A photo never replaces a saved score by itself: the teacher sees both scores and chooses.
 async function handleFiles(event) {
   const files = [...event.target.files]
   errorMessage.value = ''
+  if (!okToLeave()) {
+    if (fileInput.value) fileInput.value.value = ''
+    return
+  }
+  if (isDirty.value) openStudent(review.value.studentId)
   batch.value = files.map((file) => ({ name: file.name, status: 'menunggu' }))
   const counts = countsFromKey(exam.value.answer_key)
   for (const [i, file] of files.entries()) {
@@ -187,30 +202,30 @@ async function handleFiles(event) {
       const { gray, w, h } = await fileToGray(file)
       const sheet = readSheet(gray, w, h, counts)
       if (!sheet) {
-        if (files.length === 1 && studentId.value) {
-          row.status = 'bukan lembar template, dibaca AI...'
-          const data = await gradeWithAi(file)
-          Object.assign(row, { status: 'ok', studentId: studentId.value, score: data.score, flagged: 0, source: 'AI' })
-        } else {
-          row.status = 'gagal: lembar template tidak terbaca. Foto ulang: seluruh lembar & 4 kotak hitam terlihat. Jika jumlah soal diubah setelah dicetak, cetak ulang lembarnya.'
-        }
+        row.status = 'gagal: lembar template tidak terbaca. Foto ulang: seluruh lembar & 4 kotak hitam terlihat. Jika jumlah soal diubah setelah dicetak, cetak ulang lembarnya. Untuk lembar lain, pilih siswa di langkah 4 lalu unggah di kartu siswa.'
         continue
       }
       if (sheet.id.examId !== Number(examId.value)) {
         row.status = 'gagal: lembar ini untuk ujian lain'
         continue
       }
-      const id = sheet.id.studentId || Number(studentId.value)
+      const id = sheet.id.studentId
       if (!id) {
-        row.status = 'gagal: lembar kosong tanpa nama. Pilih siswa dulu, lalu unggah satu foto.'
+        row.status = 'gagal: lembar kosong tanpa nama. Pilih siswa di langkah 4, lalu unggah di kartu siswa.'
         continue
       }
       if (!students.value.some((s) => s.id === id)) {
         row.status = 'gagal: siswa di lembar ini tidak ada di kelas'
         continue
       }
-      const data = await save(id, sheet.answers, { source: 'template' })
       const flagged = Object.values(sheet.answers).flat().filter((a) => a.ragu).length
+      const saved = results.value[id]
+      if (saved) {
+        const { score } = scoreAnswers(sheet.answers, exam.value.answer_key, exam.value.weights)
+        Object.assign(row, { status: 'pilih', studentId: id, answers: sheet.answers, flagged, oldScore: Number(saved.score), newScore: score })
+        continue
+      }
+      const data = await save(id, sheet.answers, { source: 'template' })
       Object.assign(row, { status: 'ok', studentId: id, score: data.score, flagged, source: 'template' })
     } catch (err) {
       row.status = `gagal: ${err.response ? getError(err) : err.message}`
@@ -221,6 +236,53 @@ async function handleFiles(event) {
   // With one photo, open it directly for checking
   const done = batch.value.filter((r) => r.status === 'ok')
   if (files.length === 1 && done.length) showStudent(done[0].studentId)
+  else refreshOpenStudent()
+}
+
+async function replaceWithPhoto(row) {
+  busy.value = 'Menyimpan...'
+  try {
+    const data = await save(row.studentId, row.answers, { source: 'template' })
+    Object.assign(row, { status: 'ok', score: data.score, source: 'template' })
+    if (batch.value.length === 1) showStudent(row.studentId)
+    else refreshOpenStudent()
+  } catch (err) {
+    row.status = `gagal: ${err.response ? getError(err) : err.message}`
+  } finally {
+    busy.value = ''
+  }
+}
+
+// A photo for the student whose card is open: a blank template sheet, or any other sheet (read by AI)
+async function handleStudentPhoto(event) {
+  const input = event.target
+  const [file] = input.files
+  const id = review.value.studentId
+  const saved = results.value[id]
+  errorMessage.value = ''
+  if (!file || !okToLeave() || (saved && !window.confirm(`${studentName(id)} sudah punya nilai ${Number(saved.score)}. Ganti dengan hasil foto ini?`))) {
+    input.value = ''
+    return
+  }
+  busy.value = 'Membaca foto...'
+  try {
+    const { gray, w, h } = await fileToGray(file)
+    const sheet = readSheet(gray, w, h, countsFromKey(exam.value.answer_key))
+    if (sheet) {
+      if (sheet.id.examId !== Number(examId.value)) throw new Error('lembar ini untuk ujian lain.')
+      if (sheet.id.studentId && sheet.id.studentId !== id) throw new Error(`lembar ini milik ${studentName(sheet.id.studentId)}. Unggah di langkah 3.`)
+      await save(id, sheet.answers, { source: 'template' })
+    } else {
+      busy.value = 'Bukan lembar template, dibaca AI...'
+      await gradeWithAi(file, id)
+    }
+    openStudent(id, { saved: true })
+  } catch (err) {
+    errorMessage.value = `Gagal: ${err.response ? getError(err) : err.message}`
+  } finally {
+    busy.value = ''
+    input.value = ''
+  }
 }
 
 // Phone photos are often > 4 MB (over the Vercel request limit): shrink before sending
@@ -240,10 +302,10 @@ const compressImage = (file, maxSize = 2000) =>
     img.src = URL.createObjectURL(file)
   })
 
-async function gradeWithAi(file) {
+async function gradeWithAi(file, id) {
   const image = await compressImage(file)
-  const res = await api.post('/grade', { exam_id: examId.value, student_id: studentId.value, image })
-  results.value = { ...results.value, [studentId.value]: { student_id: studentId.value, score: res.data.score, grade: res.data.grade, answers: res.data.answers, sheet_quality: res.data.sheet_quality } }
+  const res = await api.post('/grade', { exam_id: examId.value, student_id: id, image })
+  remember(id, res.data)
   return res.data
 }
 
@@ -311,11 +373,11 @@ function nextStudent() {
         </div>
 
         <div class="rounded-2xl border border-slate-100 bg-white p-4">
-          <p class="mb-2 font-semibold">3. Foto lembar jawaban</p>
-          <input ref="fileInput" type="file" accept="image/*" multiple class="input" :disabled="Boolean(busy)" @change="handleFiles" />
+          <p class="mb-2 font-semibold">3. Foto lembar template</p>
+          <input ref="fileInput" type="file" accept="image/*" multiple class="input" :disabled="Boolean(busy)" aria-label="Foto lembar template" @change="handleFiles" />
           <p class="mt-2 text-xs text-slate-500">
-            Lembar template dari aplikasi: boleh pilih banyak foto sekaligus, siswa dikenali otomatis, dibaca tanpa AI.
-            Lembar lain: pilih siswa di bawah dulu, lalu unggah satu foto (dibaca AI).
+            Lembar dari aplikasi: boleh pilih banyak foto sekaligus, siswa dikenali otomatis, dibaca tanpa AI.
+            Lembar kosong atau lembar lain: pilih siswa di langkah 4, lalu unggah di kartu siswa.
           </p>
           <p v-if="busy" class="mt-2 text-sm text-slate-700">{{ busy }}</p>
           <ul v-if="batch.length" class="mt-3 divide-y divide-slate-100 text-sm">
@@ -326,13 +388,18 @@ function nextStudent() {
                 <span v-if="row.flagged" class="rounded-full bg-amber-100 px-2 text-amber-800">{{ row.flagged }} perlu dicek</span>
                 <button class="btn-ghost" @click="showStudent(row.studentId)">Periksa</button>
               </span>
+              <span v-else-if="row.status === 'pilih'" class="flex flex-wrap items-center gap-2">
+                <span class="text-amber-800">{{ studentName(row.studentId) }} sudah punya nilai {{ row.oldScore }}; foto ini {{ row.newScore }}.</span>
+                <button class="btn-ghost" :disabled="Boolean(busy)" @click="replaceWithPhoto(row)">Ganti</button>
+                <button class="btn-ghost" :disabled="Boolean(busy)" @click="row.status = 'nilai lama tetap dipakai'">Biarkan</button>
+              </span>
               <span v-else :class="row.status.startsWith('gagal') ? 'text-red-600' : 'text-slate-600'">{{ row.status }}</span>
             </li>
           </ul>
         </div>
 
         <select v-model="studentId" class="input">
-          <option value="">Pilih siswa untuk diperiksa / diisi manual</option>
+          <option value="">4. Pilih siswa untuk diperiksa / diisi manual</option>
           <option v-for="item in students" :key="item.id" :value="item.id">
             {{ item.name }}{{ results[item.id] ? ` — ${Number(results[item.id].score)}` : ' — belum dinilai' }}
           </option>
@@ -348,6 +415,14 @@ function nextStudent() {
       <p v-if="flaggedCount" class="mt-1 text-sm text-amber-800">
         {{ flaggedCount }} jawaban ditandai <b>?</b> (tanda tipis / terhapus / ganda). Cocokkan dengan kertasnya.
       </p>
+
+      <div class="mt-4 rounded-2xl border border-slate-100 bg-white p-4">
+        <label class="block text-sm font-semibold text-slate-700">
+          Foto lembar kosong atau lembar lain
+          <span class="mb-2 block text-xs font-normal text-slate-500">Satu foto. Nilainya disimpan untuk siswa ini. Lembar selain template dibaca AI.</span>
+          <input type="file" accept="image/*" class="input font-normal" :disabled="Boolean(busy)" :aria-label="`Unggah foto untuk ${studentName(review.studentId)}`" @change="handleStudentPhoto" />
+        </label>
+      </div>
 
       <p class="mt-4 text-xs text-slate-500">Isi "-" untuk kosong, "!!" untuk jawaban ganda.</p>
       <div class="mt-4 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">

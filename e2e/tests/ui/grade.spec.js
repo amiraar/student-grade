@@ -270,11 +270,13 @@ test.describe('from print page to score, without AI', () => {
 
     await openGrade(page, ctx)
     await page.locator('input[type=file]').setInputFiles({ name: 'kosong.png', mimeType: 'image/png', buffer: blank })
-    await expect(page.getByText('gagal: lembar kosong tanpa nama. Pilih siswa dulu, lalu unggah satu foto.')).toBeVisible({ timeout: 30_000 })
+    await expect(page.getByText('gagal: lembar kosong tanpa nama. Pilih siswa di langkah 4, lalu unggah di kartu siswa.')).toBeVisible({ timeout: 30_000 })
 
     await pickStudent(page).selectOption({ label: `${ctx.student.name} — belum dinilai` })
-    await page.locator('input[type=file]').setInputFiles({ name: 'kosong.png', mimeType: 'image/png', buffer: blank })
-    await expect(page.getByText(`${ctx.student.name}: 0`)).toBeVisible({ timeout: 30_000 })
+    await page.getByLabel(`Unggah foto untuk ${ctx.student.name}`).setInputFiles({ name: 'kosong.png', mimeType: 'image/png', buffer: blank })
+    await expect(page.getByText('Tersimpan.')).toBeVisible({ timeout: 30_000 })
+    await expect(page.getByText('Sumber: Lembar template (tanpa AI)')).toBeVisible()
+    expect((await ctx.api.get(`/exams/${ctx.exam.id}/results`)).body.total).toBe(1)
   })
 })
 
@@ -312,10 +314,10 @@ test.describe('photos that are not the template', () => {
     await openGrade(page, { token, klass, exam })
     await pickStudent(page).selectOption({ label: `${student.name} — belum dinilai` })
     const buffer = Buffer.from(await grayPng(page), 'base64')
-    await page.locator('input[type=file]').setInputFiles({ name: 'foto-hp.png', mimeType: 'image/png', buffer })
+    await page.getByLabel(`Unggah foto untuk ${student.name}`).setInputFiles({ name: 'foto-hp.png', mimeType: 'image/png', buffer })
 
     // Stub reads A, B, E: 2 of 3 -> 67
-    await expect(page.getByText(`${student.name}: 67`)).toBeVisible({ timeout: 30_000 })
+    await expect(page.getByText('Nilai: 67 (D)')).toBeVisible({ timeout: 30_000 })
     await expect(page.getByText('Sumber: AI · foto baik')).toBeVisible()
     expect((await api.get(`/exams/${exam.id}/results`)).body.data[0].sheet_quality).toBe('good')
   })
