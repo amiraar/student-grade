@@ -1,9 +1,19 @@
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import api from '../lib/api.js'
 
 const stats = ref({ classes: 0, students: 0, exams: 0 })
 const recentExams = ref([])
+const loaded = ref(false)
+
+// The way through the app for a teacher who has not set everything up yet
+const steps = computed(() => [
+  { to: '/classes', title: 'Buat kelas', hint: 'Nama kelas, tahun ajaran, semester.', done: stats.value.classes > 0 },
+  { to: '/students', title: 'Tambah siswa', hint: 'Satu per satu atau impor CSV.', done: stats.value.students > 0 },
+  { to: '/exams', title: 'Buat ujian', hint: 'Kunci jawaban dan cara menghitung nilai.', done: stats.value.exams > 0 },
+  { to: '/grade', title: 'Cetak dan koreksi', hint: 'Cetak lembar, lalu foto atau isi manual.', done: false }
+])
+const showSteps = computed(() => loaded.value && !(stats.value.classes && stats.value.students && stats.value.exams))
 
 const load = async () => {
   const [classesRes, examsRes, studentsRes] = await Promise.all([
@@ -17,6 +27,7 @@ const load = async () => {
     exams: examsRes.data.total
   }
   recentExams.value = examsRes.data.data
+  loaded.value = true
 }
 
 onMounted(load)
@@ -43,6 +54,19 @@ onMounted(load)
       </div>
     </section>
 
+    <section v-if="showSteps" class="card p-4 md:p-8">
+      <h2 class="text-xl font-semibold">Mulai dari sini</h2>
+      <ol class="mt-4 grid gap-3 md:grid-cols-4">
+        <li v-for="(step, i) in steps" :key="step.to">
+          <RouterLink :to="step.to" class="block h-full rounded-2xl border border-slate-100 bg-white p-4 hover:border-amber-200">
+            <p class="font-semibold text-slate-900">{{ i + 1 }}. {{ step.title }}</p>
+            <p class="text-sm text-slate-600">{{ step.hint }}</p>
+            <p v-if="step.done" class="mt-1 text-sm font-medium text-emerald-700">Sudah ada</p>
+          </RouterLink>
+        </li>
+      </ol>
+    </section>
+
     <section class="card p-4 md:p-8">
       <div class="flex items-center justify-between">
         <h2 class="text-xl font-semibold">Ujian Terbaru</h2>
@@ -51,7 +75,7 @@ onMounted(load)
       <div class="mt-4 space-y-3">
         <RouterLink v-for="exam in recentExams" :key="exam.id" :to="`/exams/${exam.id}`" class="block rounded-2xl border border-slate-100 bg-white p-4">
           <p class="font-semibold text-slate-900">{{ exam.title }}</p>
-          <p class="text-sm text-slate-600">{{ exam.subject }} · {{ exam.exam_date }}</p>
+          <p class="text-sm text-slate-600">{{ exam.class_name }} · {{ exam.subject }} · {{ exam.exam_date }}</p>
         </RouterLink>
         <p v-if="!recentExams.length" class="text-sm text-slate-500">Belum ada ujian.</p>
       </div>
