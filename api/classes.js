@@ -1,11 +1,18 @@
+import { readJson } from '../lib/body.js'
 import { requireAuth } from '../lib/middleware.js'
 import { query } from '../lib/db.js'
 import { getPagination } from '../lib/pagination.js'
 import { withPagination } from '../lib/pagination-response.js'
+import { parseId, parseSemester, textError } from '../lib/params.js'
 import { json, error } from '../lib/response.js'
 import { getSegments } from '../lib/route.js'
 
 const sortable = new Set(['name', 'academic_year', 'semester', 'created_at'])
+
+const classFieldError = (name, academicYear, semester) =>
+  textError(name, 'Nama kelas', 100) ||
+  textError(academicYear, 'Tahun ajaran', 20) ||
+  (parseSemester(semester) ? null : 'Semester harus 1 atau 2')
 
 async function getClass(id, teacherId) {
   const rows = await query('SELECT * FROM classes WHERE id = $1 AND teacher_id = $2', [id, teacherId])
@@ -16,7 +23,8 @@ async function handler(req) {
   const { error: authError, user } = await requireAuth(req)
   if (authError) return authError
 
-  const { url, segments } = getSegments(req, 'classes')
+  const { url, segments, badQuery } = getSegments(req, 'classes')
+  if (badQuery) return error('Parameter tidak valid', 400)
   const [idSegment, sub] = segments
 
   // /api/classes — list or create
@@ -38,7 +46,9 @@ async function handler(req) {
         filters.push(`academic_year = $${params.length}`)
       }
       if (semester) {
-        params.push(Number(semester))
+        const value = parseSemester(semester)
+        if (!value) return error('Semester tidak valid', 400)
+        params.push(value)
         filters.push(`semester = $${params.length}`)
       }
 
@@ -64,7 +74,7 @@ async function handler(req) {
     if (req.method === 'POST') {
       let body
       try {
-        body = await req.json()
+        body = await readJson(req)
       } catch {
         return error('Body request tidak valid', 400)
       }
@@ -72,12 +82,14 @@ async function handler(req) {
       if (!name || !academic_year || !semester) {
         return error('Nama, tahun ajaran, dan semester wajib diisi', 400)
       }
+      const invalid = classFieldError(name, academic_year, semester)
+      if (invalid) return error(invalid, 422)
 
       const rows = await query(
         `INSERT INTO classes (teacher_id, name, academic_year, semester)
          VALUES ($1, $2, $3, $4)
          RETURNING *`,
-        [user.id, name, academic_year, Number(semester)]
+        [user.id, name, academic_year, parseSemester(semester)]
       )
 
       return json(rows[0], 201)
@@ -86,8 +98,8 @@ async function handler(req) {
     return error('Method not allowed', 405)
   }
 
-  const id = Number(idSegment)
-  if (Number.isNaN(id)) return error('ID tidak valid', 400)
+  const id = parseId(idSegment)
+  if (!id) return error('ID tidak valid', 400)
 
   // GET /api/classes/:id/students
   if (sub === 'students') {
@@ -126,13 +138,15 @@ async function handler(req) {
     let rows = []
 
     if (examId) {
+      const examFilter = parseId(examId)
+      if (!examFilter) return error('exam_id tidak valid', 400)
       rows = await query(
         `SELECT s.id AS student_id, s.name AS student_name, r.score AS average_score
          FROM students s
          LEFT JOIN results r ON r.student_id = s.id AND r.exam_id = $2
          WHERE s.class_id = $1
          ORDER BY s.name ASC`,
-        [id, Number(examId)]
+        [id, examFilter]
       )
     } else {
       rows = await query(
@@ -160,7 +174,7 @@ async function handler(req) {
   if (req.method === 'PUT') {
     let body
     try {
-      body = await req.json()
+      body = await readJson(req)
     } catch {
       return error('Body request tidak valid', 400)
     }
@@ -168,12 +182,16 @@ async function handler(req) {
     const existing = await getClass(id, user.id)
     if (!existing) return error('Kelas tidak ditemukan', 404)
 
+    // Fields left out keep their value
+    const invalid = classFieldError(name || existing.name, academic_year || existing.academic_year, semester || existing.semester)
+    if (invalid) return error(invalid, 422)
+
     const rows = await query(
       `UPDATE classes
        SET name = $1, academic_year = $2, semester = $3, updated_at = NOW()
        WHERE id = $4
        RETURNING *`,
-      [name || existing.name, academic_year || existing.academic_year, semester || existing.semester, id]
+      [name || existing.name, academic_year || existing.academic_year, parseSemester(semester || existing.semester), id]
     )
 
     return json(rows[0])

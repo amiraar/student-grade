@@ -5,6 +5,10 @@ frontend/node_modules/
 # Build output
 frontend/dist/
 
+# E2E output
+e2e/test-results/
+e2e/playwright-report/
+
 # Environment variables (secrets)
 .env
 .env.*

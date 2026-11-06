@@ -1,8 +1,12 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
+import AnswerKeyFields from '../components/AnswerKeyFields.vue'
 import ScoreRules from '../components/ScoreRules.vue'
+import { buildAnswerKey } from '../lib/answerKey.js'
 import api, { errorMessage } from '../lib/api.js'
+import { latestRequest } from '../lib/latest.js'
 
+const trackLoad = latestRequest()
 const exams = ref([])
 const classes = ref([])
 const search = ref('')
@@ -25,6 +29,7 @@ const form = ref({
 })
 
 const load = async () => {
+  const isNewest = trackLoad()
   const [examsRes, classesRes] = await Promise.all([
     api.get('/exams', {
       params: {
@@ -35,30 +40,14 @@ const load = async () => {
     }),
     api.get('/classes?per_page=200')
   ])
+  if (!isNewest()) return
   exams.value = examsRes.data.data
   classes.value = classesRes.data.data
 }
 
-const buildAnswerKey = () => {
-  const normalize = (value) =>
-    value
-      .split(/[\n,;\s]+/)
-      .map((item) => item.trim().toUpperCase())
-      .filter(Boolean)
-
-  const buildSection = (values) =>
-    values.map((answer, index) => ({ no: index + 1, answer }))
-
-  return {
-    pg: buildSection(normalize(form.value.pg)),
-    bs: buildSection(normalize(form.value.bs)),
-    mj: buildSection(normalize(form.value.mj))
-  }
-}
-
 const totalQuestions = computed(() => {
   if (!form.value) return 0
-  const key = buildAnswerKey()
+  const key = buildAnswerKey(form.value)
   return key.pg.length + key.bs.length + key.mj.length
 })
 
@@ -68,7 +57,7 @@ const submit = async () => {
     title: form.value.title,
     subject: form.value.subject,
     exam_date: form.value.exam_date,
-    answer_key: buildAnswerKey(),
+    answer_key: buildAnswerKey(form.value),
     weights: {
       pg: Number(form.value.weight_pg),
       bs: Number(form.value.weight_bs),
@@ -124,20 +113,7 @@ onMounted(load)
         <input v-model="form.exam_date" type="date" class="input" />
       </div>
 
-      <div class="mt-4 grid gap-3 md:grid-cols-3">
-        <label class="block text-sm text-slate-600">
-          Kunci Pilihan Ganda (A–E)
-          <textarea v-model="form.pg" rows="4" class="input" placeholder="Kunci PG A–E (contoh: A,B,C,D,E)"></textarea>
-        </label>
-        <label class="block text-sm text-slate-600">
-          Kunci Benar/Salah (B/S)
-          <textarea v-model="form.bs" rows="4" class="input" placeholder="Kunci B/S (contoh: B,S,B)"></textarea>
-        </label>
-        <label class="block text-sm text-slate-600">
-          Kunci Menjodohkan (A–K)
-          <textarea v-model="form.mj" rows="4" class="input" placeholder="Kunci Menjodohkan (contoh: A,B,C)"></textarea>
-        </label>
-      </div>
+      <AnswerKeyFields :form="form" />
       <ScoreRules :form="form" :total="totalQuestions" />
       <button class="btn mt-4" @click="submit">Simpan Ujian</button>
       <p v-if="message.text" class="mt-2 text-sm" :class="message.type === 'error' ? 'text-red-600' : 'text-emerald-700'">{{ message.text }}</p>

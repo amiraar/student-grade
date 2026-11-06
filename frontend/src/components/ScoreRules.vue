@@ -14,14 +14,16 @@ const useTable = computed({
   }
 })
 
-// Keep one row per possible number of correct answers when the key changes
+// Keep one row per possible number of correct answers when the key changes.
+// A row still holding its automatic value is recalculated; only a value the teacher typed is kept.
+// The top row is always the automatic 100, so full marks stay reachable.
 watch(
   () => props.total,
   (n) => {
     const table = props.form.table
-    if (Array.isArray(table) && table.length !== n + 1) {
-      props.form.table = proportional(n).map((value, k) => (k < table.length && k < n ? table[k] : value))
-    }
+    if (!Array.isArray(table) || table.length === n + 1) return
+    const previous = proportional(table.length - 1)
+    props.form.table = proportional(n).map((value, k) => (k < n && k < table.length && table[k] !== previous[k] ? table[k] : value))
   }
 )
 </script>

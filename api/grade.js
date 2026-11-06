@@ -1,7 +1,10 @@
+import { readJson } from '../lib/body.js'
 import { requireAuth } from '../lib/middleware.js'
 import { analyzeAnswerSheet } from '../lib/gemini.js'
 import { scoreAnswers } from '../lib/scoring.js'
 import { normalizeAnswerKey } from '../lib/exam.js'
+import { parseId } from '../lib/params.js'
+import { isValidAnswers } from '../lib/validate.js'
 import { query } from '../lib/db.js'
 import { json, error } from '../lib/response.js'
 import { rateLimit } from '../lib/rate-limit.js'
@@ -25,18 +28,20 @@ async function handler(req) {
 
   let body
   try {
-    body = await req.json()
+    body = await readJson(req)
   } catch {
     return error('Body request tidak valid', 400)
   }
   const { image, answers: manualAnswers, exam_id, student_id, source } = body || {}
 
-  const examId = Number(exam_id)
-  const studentId = Number(student_id)
+  const examId = parseId(exam_id)
+  const studentId = parseId(student_id)
   if (!examId || !studentId) return error('exam_id dan student_id wajib diisi', 400)
   if (!image && (!manualAnswers || typeof manualAnswers !== 'object')) {
     return error('Foto lembar jawaban atau jawaban manual wajib diisi', 400)
   }
+  if (image && typeof image !== 'string') return error('Foto lembar jawaban tidak valid', 422)
+  if (!image && !isValidAnswers(manualAnswers)) return error('Format jawaban tidak valid', 422)
 
   const examRows = await query(
     `SELECT e.id, e.class_id, e.answer_key, e.weights

@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref, watch, onMounted } from 'vue'
 import api, { errorMessage as getError } from '../lib/api.js'
+import { latestRequest } from '../lib/latest.js'
 import { countsFromKey } from '../lib/sheet.js'
 import { fileToGray, readSheet } from '../lib/omr.js'
 // Same scoring code as the server, for the live score while typing
@@ -42,7 +43,9 @@ onMounted(async () => {
   classes.value = res.data.data
 })
 
+const trackClass = latestRequest()
 watch(classId, async () => {
+  const isNewest = trackClass()
   examId.value = ''
   students.value = []
   exams.value = []
@@ -51,11 +54,14 @@ watch(classId, async () => {
     api.get('/students', { params: { class_id: classId.value, per_page: 200, sort: 'name', order: 'asc' } }),
     api.get('/exams', { params: { class_id: classId.value, per_page: 200 } })
   ])
+  if (!isNewest()) return
   students.value = studentsRes.data.data
   exams.value = examsRes.data.data
 })
 
+const trackExam = latestRequest()
 watch(examId, async () => {
+  const isNewest = trackExam()
   exam.value = null
   results.value = {}
   studentId.value = ''
@@ -66,6 +72,7 @@ watch(examId, async () => {
     api.get(`/exams/${examId.value}`),
     api.get(`/exams/${examId.value}/results`, { params: { per_page: 200 } })
   ])
+  if (!isNewest()) return
   exam.value = examRes.data
   results.value = Object.fromEntries(resultsRes.data.data.map((r) => [r.student_id, r]))
 })

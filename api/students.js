@@ -1,12 +1,16 @@
+import { readJson } from '../lib/body.js'
 import { requireAuth } from '../lib/middleware.js'
 import { query } from '../lib/db.js'
 import { getPagination } from '../lib/pagination.js'
 import { withPagination } from '../lib/pagination-response.js'
 import { decodeCsvInput, parseCsv } from '../lib/csv.js'
+import { parseId, parseSemester, textError } from '../lib/params.js'
 import { json, error } from '../lib/response.js'
 import { getSegments } from '../lib/route.js'
 
 const sortable = new Set(['name', 'nis', 'created_at'])
+
+const studentFieldError = (name, nis) => textError(name, 'Nama siswa', 255) || textError(nis, 'NIS', 50)
 
 async function getStudent(id, teacherId) {
   const rows = await query(
@@ -23,7 +27,8 @@ async function handler(req) {
   const { error: authError, user } = await requireAuth(req)
   if (authError) return authError
 
-  const { url, segments } = getSegments(req, 'students')
+  const { url, segments, badQuery } = getSegments(req, 'students')
+  if (badQuery) return error('Parameter tidak valid', 400)
   const [idSegment, sub] = segments
 
   // /api/students — list or create
@@ -42,7 +47,9 @@ async function handler(req) {
         filters.push(`(LOWER(s.name) LIKE $${params.length} OR LOWER(s.nis) LIKE $${params.length})`)
       }
       if (classId) {
-        params.push(Number(classId))
+        const value = parseId(classId)
+        if (!value) return error('class_id tidak valid', 400)
+        params.push(value)
         filters.push(`s.class_id = $${params.length}`)
       }
       if (academicYear) {
@@ -50,7 +57,9 @@ async function handler(req) {
         filters.push(`c.academic_year = $${params.length}`)
       }
       if (semester) {
-        params.push(Number(semester))
+        const value = parseSemester(semester)
+        if (!value) return error('Semester tidak valid', 400)
+        params.push(value)
         filters.push(`c.semester = $${params.length}`)
       }
 
@@ -87,26 +96,27 @@ async function handler(req) {
     if (req.method === 'POST') {
       let body
       try {
-        body = await req.json()
+        body = await readJson(req)
       } catch {
         return error('Body request tidak valid', 400)
       }
       const { class_id, name, nis } = body || {}
       if (!class_id || !name || !nis) return error('class_id, nama, dan NIS wajib diisi', 400)
+      const classId = parseId(class_id)
+      if (!classId) return error('class_id tidak valid', 400)
+      const invalid = studentFieldError(name, nis)
+      if (invalid) return error(invalid, 422)
 
-      const classes = await query('SELECT id FROM classes WHERE id = $1 AND teacher_id = $2', [
-        Number(class_id),
-        user.id
-      ])
+      const classes = await query('SELECT id FROM classes WHERE id = $1 AND teacher_id = $2', [classId, user.id])
       if (!classes.length) return error('Kelas tidak ditemukan', 404)
 
       let rows
       try {
         rows = await query(
-          `INSERT INTO students (class_id, name, nis)
-           VALUES ($1, $2, $3)
+          `INSERT INTO students (class_id, teacher_id, name, nis)
+           VALUES ($1, $2, $3, $4)
            RETURNING *`,
-          [Number(class_id), name, nis]
+          [classId, user.id, name, nis]
         )
       } catch (err) {
         if (err?.code === '23505') return error('NIS sudah terdaftar', 409)
@@ -125,12 +135,13 @@ async function handler(req) {
 
     let body
     try {
-      body = await req.json()
+      body = await readJson(req)
     } catch {
       return error('Body request tidak valid', 400)
     }
     const { class_id, csv } = body || {}
     if (!csv) return error('CSV wajib diisi', 400)
+    if (typeof csv !== 'string') return error('CSV tidak valid', 400)
 
     const content = decodeCsvInput(csv)
     const rows = parseCsv(content)
@@ -148,10 +159,10 @@ async function handler(req) {
     const entries = rows.slice(startIndex).map((row) => ({
       name: row[nameIndex >= 0 ? nameIndex : 0],
       nis: row[nisIndex >= 0 ? nisIndex : 1],
-      class_id: row[classIndex >= 0 ? classIndex : 2] || class_id
+      class_id: parseId(row[classIndex >= 0 ? classIndex : 2] || class_id)
     }))
 
-    const classIds = [...new Set(entries.map((item) => Number(item.class_id)).filter(Boolean))]
+    const classIds = [...new Set(entries.map((item) => item.class_id).filter(Boolean))]
     if (!classIds.length) return error('class_id wajib diisi', 400)
 
     const classes = await query(
@@ -163,13 +174,15 @@ async function handler(req) {
     let inserted = 0
     for (const entry of entries) {
       if (!entry.name || !entry.nis || !entry.class_id) continue
-      if (!allowed.has(Number(entry.class_id))) continue
+      if (!allowed.has(entry.class_id)) continue
+      // A decoded file can hold anything: rows the columns cannot store count as skipped
+      if (studentFieldError(entry.name, entry.nis) || `${entry.name}${entry.nis}`.includes('\0')) continue
       const added = await query(
-        `INSERT INTO students (class_id, name, nis)
-         VALUES ($1, $2, $3)
-         ON CONFLICT (nis) DO NOTHING
+        `INSERT INTO students (class_id, teacher_id, name, nis)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (teacher_id, nis) DO NOTHING
          RETURNING id`,
-        [Number(entry.class_id), entry.name, entry.nis]
+        [entry.class_id, user.id, entry.name, entry.nis]
       )
       inserted += added.length
     }
@@ -178,8 +191,8 @@ async function handler(req) {
     return json({ message: `Import selesai: ${inserted} siswa ditambahkan, ${skipped} dilewati`, inserted, skipped })
   }
 
-  const id = Number(idSegment)
-  if (Number.isNaN(id)) return error('ID tidak valid', 400)
+  const id = parseId(idSegment)
+  if (!id) return error('ID tidak valid', 400)
 
   // GET /api/students/:id/results
   if (sub === 'results') {
@@ -196,7 +209,9 @@ async function handler(req) {
       filters.push(`c.academic_year = $${params.length}`)
     }
     if (semester) {
-      params.push(Number(semester))
+      const value = parseSemester(semester)
+      if (!value) return error('Semester tidak valid', 400)
+      params.push(value)
       filters.push(`c.semester = $${params.length}`)
     }
 
@@ -243,29 +258,37 @@ async function handler(req) {
 
     let body
     try {
-      body = await req.json()
+      body = await readJson(req)
     } catch {
       return error('Body request tidak valid', 400)
     }
     const { name, nis, class_id } = body || {}
 
+    // Fields left out keep their value
+    const invalid = studentFieldError(name || data.name, nis || data.nis)
+    if (invalid) return error(invalid, 422)
+
     let targetClassId = data.class_id
     if (class_id) {
-      const classes = await query('SELECT id FROM classes WHERE id = $1 AND teacher_id = $2', [
-        Number(class_id),
-        user.id
-      ])
+      targetClassId = parseId(class_id)
+      if (!targetClassId) return error('class_id tidak valid', 400)
+      const classes = await query('SELECT id FROM classes WHERE id = $1 AND teacher_id = $2', [targetClassId, user.id])
       if (!classes.length) return error('Kelas tidak ditemukan', 404)
-      targetClassId = Number(class_id)
     }
 
-    const rows = await query(
-      `UPDATE students
-       SET name = $1, nis = $2, class_id = $3, updated_at = NOW()
-       WHERE id = $4
-       RETURNING *`,
-      [name || data.name, nis || data.nis, targetClassId, id]
-    )
+    let rows
+    try {
+      rows = await query(
+        `UPDATE students
+         SET name = $1, nis = $2, class_id = $3, updated_at = NOW()
+         WHERE id = $4
+         RETURNING *`,
+        [name || data.name, nis || data.nis, targetClassId, id]
+      )
+    } catch (err) {
+      if (err?.code === '23505') return error('NIS sudah terdaftar', 409)
+      throw err
+    }
 
     return json(rows[0])
   }

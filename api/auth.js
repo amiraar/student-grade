@@ -1,3 +1,4 @@
+import { readJson } from '../lib/body.js'
 import { query } from '../lib/db.js'
 import { comparePassword, hashPassword } from '../lib/password.js'
 import { signToken } from '../lib/auth.js'
@@ -6,6 +7,9 @@ import { json, error, corsHeaders } from '../lib/response.js'
 import { sanitizeTeacher } from '../lib/auth-response.js'
 import { rateLimit } from '../lib/rate-limit.js'
 import { getSegments } from '../lib/route.js'
+import { textError } from '../lib/params.js'
+
+const EMAIL_FORMAT = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 async function handler(req) {
   if (req.method === 'OPTIONS') {
@@ -31,13 +35,14 @@ async function handler(req) {
 
     let body
     try {
-      body = await req.json()
+      body = await readJson(req)
     } catch {
       return error('Body request tidak valid', 400)
     }
     const { email, password } = body || {}
     const normalizedEmail = String(email || '').trim().toLowerCase()
     if (!normalizedEmail || !password) return error('Email dan kata sandi wajib diisi', 400)
+    if (typeof password !== 'string') return error('Email atau kata sandi salah', 401)
 
     const rows = await query('SELECT * FROM teachers WHERE email = $1', [normalizedEmail])
     const teacher = rows[0]
@@ -60,7 +65,7 @@ async function handler(req) {
 
     let body
     try {
-      body = await req.json()
+      body = await readJson(req)
     } catch {
       return error('Body request tidak valid', 400)
     }
@@ -70,7 +75,13 @@ async function handler(req) {
     if (!normalizedName || !normalizedEmail || !password) {
       return error('Nama, email, dan kata sandi wajib diisi', 400)
     }
-    if (String(password).length < 6) return error('Kata sandi minimal 6 karakter', 422)
+    if (typeof name !== 'string' || typeof email !== 'string' || typeof password !== 'string') {
+      return error('Nama, email, dan kata sandi harus berupa teks', 422)
+    }
+    const invalid = textError(normalizedName, 'Nama', 255) || textError(normalizedEmail, 'Email', 255)
+    if (invalid) return error(invalid, 422)
+    if (!EMAIL_FORMAT.test(normalizedEmail)) return error('Format email tidak valid', 422)
+    if (password.length < 6) return error('Kata sandi minimal 6 karakter', 422)
 
     const existing = await query('SELECT id FROM teachers WHERE email = $1', [normalizedEmail])
     if (existing.length) return error('Email sudah terdaftar', 409)

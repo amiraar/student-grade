@@ -1,7 +1,9 @@
 <script setup>
 import { onMounted, ref } from 'vue'
 import api, { errorMessage } from '../lib/api.js'
+import { latestRequest } from '../lib/latest.js'
 
+const trackLoad = latestRequest()
 const classes = ref([])
 const meta = ref({ total: 0 })
 const search = ref('')
@@ -9,7 +11,9 @@ const form = ref({ name: '', academic_year: '', semester: 1 })
 const error = ref('')
 
 const load = async () => {
+  const isNewest = trackLoad()
   const res = await api.get('/classes', { params: { search: search.value } })
+  if (!isNewest()) return
   classes.value = res.data.data
   meta.value = res.data
 }
