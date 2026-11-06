@@ -2,11 +2,14 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router'
 import api, { errorMessage as getError } from '../lib/api.js'
+import { ANSWER_HELP } from '../lib/answerKey.js'
 import { latestRequest } from '../lib/latest.js'
 import { countsFromKey } from '../lib/sheet.js'
 import { fileToGray, readSheet } from '../lib/omr.js'
 // Same scoring code as the server, for the live score while typing
 import { scoreAnswers } from '../../../lib/scoring.js'
+// Same rules as the server's answer key, so a letter that cannot be on the sheet is caught here
+import { rules } from '../../../lib/validate.js'
 
 const SECTIONS = { pg: 'Pilihan Ganda', bs: 'Benar/Salah', mj: 'Menjodohkan' }
 const SOURCE = { template: 'Lembar template (tanpa AI)', manual: 'Input manual', good: 'AI · foto baik', low_contrast: 'AI · kontras rendah', blurry: 'AI · buram', tilted: 'AI · miring' }
@@ -40,6 +43,18 @@ const preview = computed(() => (review.value && exam.value ? scoreAnswers(review
 const totalQuestions = computed(() => (review.value ? Object.values(review.value.items).flat().length : 0))
 const flaggedCount = computed(() => (review.value ? Object.values(review.value.items).flat().filter((i) => i.ragu).length : 0))
 const isDirty = computed(() => Boolean(review.value) && JSON.stringify(reviewAnswers(review.value.items)) !== review.value.snapshot)
+
+const isAllowed = (sec, answer) => {
+  const value = cleanAnswer(answer)
+  return value === '-' || value === '!!' || rules[sec].test(value)
+}
+const wrongAnswers = computed(() => {
+  if (!review.value) return []
+  return Object.keys(SECTIONS).flatMap((sec) => {
+    const numbers = review.value.items[sec].filter((item) => !isAllowed(sec, item.answer)).map((item) => item.no)
+    return numbers.length ? [`Periksa ${SECTIONS[sec]} nomor ${numbers.join(', ')}. ${ANSWER_HELP[sec]}`] : []
+  })
+})
 
 const saveStatus = computed(() => {
   const r = review.value
@@ -355,7 +370,14 @@ function nextStudent() {
                 <td class="px-2 py-1">{{ item.no }}</td>
                 <td class="font-semibold">{{ item.key }}</td>
                 <td class="py-1">
-                  <input v-model="item.answer" maxlength="2" class="w-16 rounded-lg border border-slate-200 bg-white px-2 py-1 text-base uppercase md:text-sm" :aria-label="`Jawaban ${label} nomor ${item.no}`" />
+                  <input
+                    v-model="item.answer"
+                    maxlength="2"
+                    class="w-16 rounded-lg border bg-white px-2 py-1 text-base uppercase md:text-sm"
+                    :class="isAllowed(sec, item.answer) ? 'border-slate-200' : 'border-red-500 ring-1 ring-red-500'"
+                    :aria-invalid="!isAllowed(sec, item.answer)"
+                    :aria-label="`Jawaban ${label} nomor ${item.no}`"
+                  />
                   <span v-if="item.ragu" class="ml-1 font-bold text-amber-700">?</span>
                 </td>
               </tr>
@@ -367,12 +389,13 @@ function nextStudent() {
       <!-- Stays on screen while a long answer table is scrolled -->
       <div class="sticky bottom-0 z-10 -mx-4 -mb-4 mt-4 flex flex-col gap-2 rounded-b-[20px] border-t border-slate-200 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between md:-mx-8 md:-mb-8 md:px-8">
         <div class="min-w-0 text-sm" role="status">
+          <p v-for="text in wrongAnswers" :key="text" class="text-red-600">{{ text }}</p>
           <p v-if="errorMessage" class="text-red-600">{{ errorMessage }}</p>
           <p v-if="saveStatus" :class="saveStatus.unsaved ? 'text-amber-700' : 'text-emerald-700'">{{ saveStatus.text }}</p>
           <p v-if="busy" class="text-slate-700">{{ busy }}</p>
         </div>
         <div class="flex shrink-0 gap-2">
-          <button class="btn flex-1 sm:flex-none" :disabled="Boolean(busy)" @click="saveReview">Simpan</button>
+          <button class="btn flex-1 sm:flex-none" :disabled="Boolean(busy) || wrongAnswers.length > 0" @click="saveReview">Simpan</button>
           <button class="btn-ghost flex-1 sm:flex-none" :disabled="Boolean(busy)" @click="nextStudent">Siswa berikutnya →</button>
         </div>
       </div>
