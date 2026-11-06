@@ -109,9 +109,9 @@ async function handler(req) {
         return error('Body request tidak valid', 400)
       }
       const { class_id, title, subject, exam_date, answer_key, weights } = body || {}
-      if (!class_id || !title || !subject || !exam_date || !answer_key || !weights) {
-        return error('Data ujian tidak lengkap', 400)
-      }
+      const required = { kelas: class_id, judul: title, 'mata pelajaran': subject, 'tanggal ujian': exam_date, 'kunci jawaban': answer_key, bobot: weights }
+      const missing = Object.keys(required).filter((label) => !required[label])
+      if (missing.length) return error(`Lengkapi: ${missing.join(', ')}`, 400)
       const classId = parseId(class_id)
       if (!classId) return error('class_id tidak valid', 400)
       const invalid = examFieldError(title, subject, exam_date)

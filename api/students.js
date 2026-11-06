@@ -101,7 +101,7 @@ async function handler(req) {
         return error('Body request tidak valid', 400)
       }
       const { class_id, name, nis } = body || {}
-      if (!class_id || !name || !nis) return error('class_id, nama, dan NIS wajib diisi', 400)
+      if (!class_id || !name || !nis) return error('Kelas, nama, dan NIS wajib diisi', 400)
       const classId = parseId(class_id)
       if (!classId) return error('class_id tidak valid', 400)
       const invalid = studentFieldError(name, nis)
@@ -163,7 +163,7 @@ async function handler(req) {
     }))
 
     const classIds = [...new Set(entries.map((item) => item.class_id).filter(Boolean))]
-    if (!classIds.length) return error('class_id wajib diisi', 400)
+    if (!classIds.length) return error('Pilih kelas tujuan', 400)
 
     const classes = await query(
       `SELECT id FROM classes WHERE teacher_id = $1 AND id = ANY($2::int[])`,
