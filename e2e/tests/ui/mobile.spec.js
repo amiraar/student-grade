@@ -26,7 +26,8 @@ test('a long answer key stays within the phone screen', async ({ page, request }
   await loginAs(page, ctx.token)
   await page.goto('/exams')
   await page.getByLabel(/Kunci Pilihan Ganda/).fill('ABCDE'.repeat(20))
-  await expect(page.getByText(/^100 soal: 1\.A 2\.B/)).toBeVisible()
+  await expect(page.getByText('100 soal', { exact: true })).toBeVisible()
+  await expect(page.getByRole('list', { name: 'Hasil bacaan Pilihan Ganda' }).getByRole('listitem')).toHaveCount(100)
   await noSideScroll(page, '/exams with a 100 question key')
 })
 

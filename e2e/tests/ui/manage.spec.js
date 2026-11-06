@@ -199,8 +199,8 @@ test('exams: create with weights, tokens split on comma, space and newline', asy
   await expect(row).toContainText('Sejarah · 2026-08-17')
 
   await row.click()
-  await expect(page.getByLabel(/Kunci Pilihan Ganda/)).toHaveValue('A, B, C, D, E')
-  await expect(page.getByLabel(/Kunci Benar/)).toHaveValue('B, S')
+  await expect(page.getByLabel(/Kunci Pilihan Ganda/)).toHaveValue('ABCDE')
+  await expect(page.getByLabel(/Kunci Benar/)).toHaveValue('BS')
   await expect(page.getByLabel(/Kunci Menjodohkan/)).toHaveValue('K')
   await expect(page.locator('input[type=date]')).toHaveValue('2026-08-17')
 })
@@ -349,7 +349,22 @@ test.describe('answer key formats', () => {
   test('the form shows how the key is read, before saving', async ({ page, request }) => {
     await openForm(page, request)
     await page.getByLabel(/Kunci Pilihan Ganda/).fill('AA\nBA')
-    await expect(page.getByText('4 soal: 1.A 2.A 3.B 4.A')).toBeVisible()
+    await expect(page.getByText('4 soal', { exact: true })).toBeVisible()
+    await expect(page.getByRole('list', { name: 'Hasil bacaan Pilihan Ganda' }).getByRole('listitem')).toHaveText(['1A', '2A', '3B', '4A'])
+  })
+
+  test('the form marks a wrong letter before saving', async ({ page, request }) => {
+    await openForm(page, request)
+    await page.getByLabel(/Kunci Pilihan Ganda/).fill('AZC')
+    await expect(page.getByText('Periksa nomor 2. Pakai huruf A–E.')).toBeVisible()
+    await expect(page.getByLabel(/Kunci Pilihan Ganda/)).toHaveAttribute('aria-invalid', 'true')
+
+    await page.getByLabel(/Kunci Benar/).fill('BA')
+    await expect(page.getByText('Periksa nomor 2. Pakai huruf B atau S.')).toBeVisible()
+
+    await page.getByLabel(/Kunci Pilihan Ganda/).fill('ABC')
+    await expect(page.getByText('Periksa nomor 2. Pakai huruf A–E.')).toBeHidden()
+    await expect(page.getByLabel(/Kunci Pilihan Ganda/)).toHaveAttribute('aria-invalid', 'false')
   })
 
   test('the conversion table counts letters as questions', async ({ page, request }) => {
@@ -388,7 +403,7 @@ test.describe('answer key formats', () => {
     await page.goto(`/exams/${exam.id}`)
 
     await page.getByLabel(/Kunci Pilihan Ganda/).fill('AB\nCD')
-    await expect(page.getByText('4 soal: 1.A 2.B 3.C 4.D')).toBeVisible()
+    await expect(page.getByRole('list', { name: 'Hasil bacaan Pilihan Ganda' }).getByRole('listitem')).toHaveText(['1A', '2B', '3C', '4D'])
     await page.getByRole('button', { name: 'Simpan Perubahan' }).click()
     await expect(page.getByText('Perubahan tersimpan. 1 nilai siswa dihitung ulang.')).toBeVisible()
     expect((await api.get(`/exams/${exam.id}`)).body.answer_key.pg.map((item) => item.answer)).toEqual(['A', 'B', 'C', 'D'])
