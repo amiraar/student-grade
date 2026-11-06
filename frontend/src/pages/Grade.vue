@@ -7,7 +7,7 @@ import { latestRequest } from '../lib/latest.js'
 import { countsFromKey } from '../lib/sheet.js'
 import { fileToGray, readSheet } from '../lib/omr.js'
 // Same scoring code as the server, for the live score while typing
-import { scoreAnswers } from '../../../lib/scoring.js'
+import { GRADE_RULES_TEXT, scoreAnswers } from '../../../lib/scoring.js'
 // Same rules as the server's answer key, so a letter that cannot be on the sheet is caught here
 import { rules } from '../../../lib/validate.js'
 
@@ -439,6 +439,7 @@ function nextStudent() {
       <h2 class="text-xl font-semibold">{{ studentName(review.studentId) }}</h2>
       <p class="text-2xl font-semibold">Nilai: {{ preview.score }} ({{ preview.grade }})</p>
       <p class="text-sm text-slate-600">Benar {{ preview.correct }} dari {{ totalQuestions }} soal</p>
+      <p class="text-xs text-slate-500">{{ GRADE_RULES_TEXT }}</p>
       <p v-if="review.source" class="text-xs text-slate-500">Sumber: {{ SOURCE[review.source] || review.source }}</p>
       <p v-if="flaggedCount" class="mt-1 text-sm text-amber-800">
         {{ flaggedCount }} jawaban ditandai <b>?</b> (tanda tipis / terhapus / ganda). Cocokkan dengan kertasnya.
