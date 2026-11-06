@@ -1,21 +1,34 @@
 <script setup>
 import { onMounted, ref } from 'vue'
+import ListPager from '../components/ListPager.vue'
 import api, { errorMessage } from '../lib/api.js'
 import { latestRequest } from '../lib/latest.js'
 
 const trackLoad = latestRequest()
 const classes = ref([])
 const meta = ref({ total: 0 })
+const page = ref(1)
 const search = ref('')
 const form = ref({ name: '', academic_year: '', semester: 1 })
 const error = ref('')
 
 const load = async () => {
   const isNewest = trackLoad()
-  const res = await api.get('/classes', { params: { search: search.value } })
+  const res = await api.get('/classes', { params: { search: search.value, page: page.value } })
   if (!isNewest()) return
   classes.value = res.data.data
   meta.value = res.data
+}
+
+// A new search or a new class starts again from the first page
+const reload = () => {
+  page.value = 1
+  return load()
+}
+
+const goToPage = (value) => {
+  page.value = value
+  load()
 }
 
 const submit = async () => {
@@ -27,7 +40,7 @@ const submit = async () => {
     return
   }
   form.value = { name: '', academic_year: '', semester: 1 }
-  await load()
+  await reload()
 }
 
 onMounted(load)
@@ -39,7 +52,7 @@ onMounted(load)
       <h1 class="section-title mb-4">Daftar Kelas</h1>
       <div class="grid gap-4 md:grid-cols-[2fr_1fr]">
         <div class="space-y-3">
-          <input v-model="search" @input="load" placeholder="Cari kelas" class="input" />
+          <input v-model="search" @input="reload" placeholder="Cari kelas" class="input" />
           <div class="grid gap-3">
             <RouterLink v-for="item in classes" :key="item.id" :to="`/classes/${item.id}`" class="rounded-2xl border border-slate-100 bg-white p-4 hover:border-amber-200">
               <p class="font-semibold text-slate-900">{{ item.name }}</p>
@@ -47,16 +60,26 @@ onMounted(load)
             </RouterLink>
             <p v-if="!classes.length" class="text-sm text-slate-500">Belum ada kelas.</p>
           </div>
+          <ListPager :meta="meta" @go="goToPage" />
         </div>
         <div class="rounded-2xl border border-slate-100 bg-slate-50 p-4">
           <h2 class="text-lg font-semibold mb-3">Tambah Kelas</h2>
           <div class="space-y-3">
-            <input v-model="form.name" placeholder="Nama kelas" class="input" />
-            <input v-model="form.academic_year" placeholder="Tahun ajaran (contoh: 2025/2026)" class="input" />
-            <select v-model="form.semester" class="input">
-              <option :value="1">Semester 1</option>
-              <option :value="2">Semester 2</option>
-            </select>
+            <label class="block text-sm text-slate-600">
+              Nama
+              <input v-model="form.name" placeholder="Nama kelas" class="input" />
+            </label>
+            <label class="block text-sm text-slate-600">
+              Tahun
+              <input v-model="form.academic_year" placeholder="Tahun ajaran (contoh: 2025/2026)" class="input" />
+            </label>
+            <label class="block text-sm text-slate-600">
+              Semester
+              <select v-model="form.semester" class="input">
+                <option :value="1">Semester 1</option>
+                <option :value="2">Semester 2</option>
+              </select>
+            </label>
             <button class="btn w-full" @click="submit">Simpan</button>
             <p v-if="error" class="text-sm text-red-600">{{ error }}</p>
           </div>

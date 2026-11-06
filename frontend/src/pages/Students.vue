@@ -1,16 +1,21 @@
 <script setup>
 import { onMounted, ref } from 'vue'
+import ListPager from '../components/ListPager.vue'
 import api, { errorMessage } from '../lib/api.js'
 import { latestRequest } from '../lib/latest.js'
 
 const trackLoad = latestRequest()
 const students = ref([])
 const classes = ref([])
+const loaded = ref(false)
+const meta = ref({})
+const page = ref(1)
 const search = ref('')
 const classId = ref('')
 const academicYear = ref('')
 const semester = ref('')
 const form = ref({ name: '', nis: '', class_id: '' })
+const firstField = ref(null)
 const importText = ref('')
 const importFile = ref(null)
 const importClassId = ref('')
@@ -25,14 +30,33 @@ const load = async () => {
         search: search.value,
         class_id: classId.value || undefined,
         academic_year: academicYear.value || undefined,
-        semester: semester.value || undefined
+        semester: semester.value || undefined,
+        page: page.value
       }
     }),
     api.get('/classes?per_page=200')
   ])
   if (!isNewest()) return
   students.value = studentsRes.data.data
+  meta.value = studentsRes.data
   classes.value = classesRes.data.data
+  loaded.value = true
+}
+
+// A changed filter or a new student starts again from the first page
+const reload = () => {
+  page.value = 1
+  return load()
+}
+
+const goToPage = (value) => {
+  page.value = value
+  load()
+}
+
+const showForm = () => {
+  firstField.value.scrollIntoView({ block: 'center' })
+  firstField.value.focus({ preventScroll: true })
 }
 
 const submit = async () => {
@@ -44,7 +68,7 @@ const submit = async () => {
   }
   message.value = { type: 'success', text: 'Siswa tersimpan.' }
   form.value = { name: '', nis: '', class_id: '' }
-  await load()
+  await reload()
 }
 
 const handleFile = (event) => {
@@ -80,7 +104,7 @@ const importCsv = async () => {
   }
   importText.value = ''
   importFile.value = null
-  await load()
+  await reload()
 }
 
 onMounted(load)
@@ -89,15 +113,21 @@ onMounted(load)
 <template>
   <div class="space-y-6 fade-in">
     <section class="card p-4 md:p-8">
-      <h1 class="section-title mb-4">Data Siswa</h1>
+      <div class="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <h1 class="section-title">Data Siswa</h1>
+        <button type="button" class="btn" @click="showForm">Tambah Siswa</button>
+      </div>
+      <p v-if="loaded && !classes.length" class="mb-3 text-sm text-amber-700">
+        Belum ada kelas. Buat dulu di menu <RouterLink to="/classes" class="font-semibold underline">Kelas</RouterLink>.
+      </p>
       <div class="grid gap-4 md:grid-cols-4">
-        <input v-model="search" @input="load" placeholder="Cari nama / NIS" class="input" />
-        <select v-model="classId" @change="load" class="input">
+        <input v-model="search" @input="reload" placeholder="Cari nama / NIS" class="input" />
+        <select v-model="classId" @change="reload" class="input">
           <option value="">Semua kelas</option>
           <option v-for="item in classes" :key="item.id" :value="item.id">{{ item.name }}</option>
         </select>
-        <input v-model="academicYear" @input="load" placeholder="Tahun ajaran" class="input" />
-        <select v-model="semester" @change="load" class="input">
+        <input v-model="academicYear" @input="reload" placeholder="Tahun ajaran" class="input" />
+        <select v-model="semester" @change="reload" class="input">
           <option value="">Semua semester</option>
           <option value="1">Semester 1</option>
           <option value="2">Semester 2</option>
@@ -112,17 +142,27 @@ onMounted(load)
         </div>
         <p v-if="!students.length" class="text-sm text-slate-500">Belum ada siswa.</p>
       </div>
+      <ListPager :meta="meta" @go="goToPage" />
     </section>
 
     <section class="card p-4 md:p-8">
       <h2 class="text-xl font-semibold mb-4">Tambah Siswa</h2>
       <div class="grid gap-3 md:grid-cols-3">
-        <input v-model="form.name" placeholder="Nama siswa" class="input" />
-        <input v-model="form.nis" placeholder="NIS" class="input" />
-        <select v-model="form.class_id" class="input">
-          <option value="">Pilih kelas</option>
-          <option v-for="item in classes" :key="item.id" :value="item.id">{{ item.name }}</option>
-        </select>
+        <label class="block text-sm text-slate-600">
+          Nama
+          <input ref="firstField" v-model="form.name" placeholder="Nama siswa" class="input" />
+        </label>
+        <label class="block text-sm text-slate-600">
+          Nomor induk
+          <input v-model="form.nis" placeholder="NIS" class="input" />
+        </label>
+        <label class="block text-sm text-slate-600">
+          Kelas
+          <select v-model="form.class_id" class="input">
+            <option value="">Pilih kelas</option>
+            <option v-for="item in classes" :key="item.id" :value="item.id">{{ item.name }}</option>
+          </select>
+        </label>
       </div>
       <button class="btn mt-4" @click="submit">Simpan</button>
       <p v-if="message.text" class="mt-2 text-sm" :class="message.type === 'error' ? 'text-red-600' : 'text-emerald-700'">{{ message.text }}</p>
