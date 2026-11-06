@@ -1,5 +1,5 @@
 import { test, expect, loginAs, selectWithOption } from './fixtures.js'
-import { answers, scenario } from '../helpers.js'
+import { answers, createClass, createExam, createStudent, newTeacher, scenario } from '../helpers.js'
 
 const noSideScroll = async (page, label) => {
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
@@ -54,6 +54,61 @@ test('manual grading works on a phone', async ({ page, request }) => {
   await page.getByRole('button', { name: 'Simpan', exact: true }).tap()
   await expect(page.getByText('Tersimpan.')).toBeVisible()
   expect(Number((await ctx.api.get(`/exams/${ctx.exam.id}/results`)).body.data[0].score)).toBe(100)
+})
+
+test('the new forms, the pager and the steps fit the phone screen', async ({ page, request }) => {
+  test.slow() // sets up enough students for a second page
+  const { api, token } = await newTeacher(request)
+  await loginAs(page, token)
+  await page.goto('/')
+  await expect(page.getByRole('heading', { name: 'Mulai dari sini' })).toBeVisible()
+  await noSideScroll(page, 'steps')
+
+  const klass = await createClass(api)
+  const student = await createStudent(api, klass.id)
+  for (let i = 0; i < 20; i++) await createStudent(api, klass.id)
+  const exam = await createExam(api, klass.id)
+
+  await page.goto(`/classes/${klass.id}`)
+  await page.getByRole('button', { name: 'Edit Kelas' }).click()
+  await expect(page.getByPlaceholder('Nama kelas')).toBeVisible()
+  await noSideScroll(page, 'class edit')
+
+  await page.goto(`/students/${student.id}`)
+  await page.getByRole('button', { name: 'Edit Siswa' }).click()
+  await expect(page.getByPlaceholder('Nama siswa')).toBeVisible()
+  await noSideScroll(page, 'student edit')
+
+  await page.goto('/students')
+  await expect(page.getByRole('navigation', { name: 'Halaman daftar' })).toBeVisible()
+  await noSideScroll(page, 'pager')
+
+  await page.goto(`/exams/${exam.id}/results`)
+  await expect(page.getByRole('heading', { name: /Belum dinilai/ })).toBeVisible()
+  await noSideScroll(page, 'results with missing students')
+})
+
+test('save stays on screen while a long answer table is scrolled', async ({ page, request }) => {
+  const { api, token } = await newTeacher(request)
+  const klass = await createClass(api)
+  const student = await createStudent(api, klass.id)
+  const exam = await createExam(api, klass.id, {
+    answer_key: { pg: Array.from({ length: 40 }, (_, i) => ({ no: i + 1, answer: 'A' })), bs: [], mj: [] }
+  })
+  await loginAs(page, token)
+  await page.goto(`/grade?exam=${exam.id}&student=${student.id}`)
+  await page.getByLabel('Jawaban Pilihan Ganda nomor 20').scrollIntoViewIfNeeded()
+
+  const save = page.getByRole('button', { name: 'Simpan', exact: true })
+  const box = await save.boundingBox()
+  const screen = page.viewportSize()
+  expect(box.y).toBeGreaterThanOrEqual(0)
+  expect(box.y + box.height).toBeLessThanOrEqual(screen.height)
+  await noSideScroll(page, 'long answer table')
+
+  await page.getByLabel('Jawaban Pilihan Ganda nomor 20').fill('A')
+  await save.tap()
+  await expect(page.getByText('Tersimpan.')).toBeVisible()
 })
 
 test('print page preview is shrunk on phones', async ({ page, request }) => {
