@@ -29,7 +29,7 @@ const fileInput = ref(null)
 const busy = ref('')
 const errorMessage = ref('')
 const batch = ref([]) // one row per uploaded photo
-const review = ref(null) // { studentId, items, snapshot, score, grade, source, saved }
+const review = ref(null) // { studentId, items, quick, snapshot, score, grade, source, saved }
 
 const studentName = (id) => students.value.find((s) => s.id === id)?.name || `Siswa #${id}`
 const gradedCount = computed(() => students.value.filter((s) => results.value[s.id]).length)
@@ -147,10 +147,10 @@ function openReview(id, answers, extra) {
       .map((k) => {
         const a = (answers[sec] || []).find((x) => Number(x.no) === Number(k.no))
         const answer = String(a?.jawaban ?? '-').trim().toUpperCase() || '-'
-        return { no: Number(k.no), key: k.answer, answer, ragu: Boolean(a?.ragu) }
+        return { no: Number(k.no), key: k.answer, answer, opened: answer, ragu: Boolean(a?.ragu) }
       })
   }
-  review.value = { studentId: id, items, snapshot: JSON.stringify(reviewAnswers(items)), score: null, grade: null, source: null, saved: false, ...extra }
+  review.value = { studentId: id, items, quick: { pg: '', bs: '', mj: '' }, snapshot: JSON.stringify(reviewAnswers(items)), score: null, grade: null, source: null, saved: false, ...extra }
 }
 
 async function save(id, answers, payload = {}) {
@@ -253,11 +253,13 @@ async function saveReview() {
   }
 }
 
-// Type a whole section at once, e.g. "ABCDA-B" or "A B C" ("-" empty, "!!" double)
+// Type a whole section at once, e.g. "ABCDA-B" or "A B C" ("-" empty, "!!" double).
+// A question the text no longer reaches goes back to the answer it had when the student was opened.
 function quickFill(sec, text) {
+  review.value.quick[sec] = text
   const tokens = text.toUpperCase().match(/!!|[A-Z]|-/g) || []
   review.value.items[sec].forEach((item, i) => {
-    if (i < tokens.length) item.answer = tokens[i]
+    item.answer = tokens[i] ?? item.opened
   })
 }
 
@@ -339,7 +341,7 @@ function nextStudent() {
             {{ label }}
             <span class="text-sm font-normal text-slate-500">({{ preview.detail[sec].correct }}/{{ review.items[sec].length }} benar)</span>
           </h3>
-          <input class="input mb-2" :placeholder="`Ketik cepat, mis. ${sec === 'bs' ? 'BSSB-B' : 'ABCDA-B'}`" :aria-label="`Ketik cepat jawaban ${label}`" @input="quickFill(sec, $event.target.value)" />
+          <input class="input mb-2" :value="review.quick[sec]" :placeholder="`Ketik cepat, mis. ${sec === 'bs' ? 'BSSB-B' : 'ABCDA-B'}`" :aria-label="`Ketik cepat jawaban ${label}`" @input="quickFill(sec, $event.target.value)" />
           <table class="w-full text-sm">
             <thead>
               <tr class="text-left text-slate-500">
