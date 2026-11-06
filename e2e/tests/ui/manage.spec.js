@@ -243,6 +243,7 @@ test('exam detail: editing the key recalculates saved scores and says how many',
   await page.goto(`/exams/${exam.id}`)
   await page.getByPlaceholder('Judul').fill('Judul Diubah')
   await page.getByLabel(/Kunci Pilihan Ganda/).fill('A, B, C, D, A')
+  page.once('dialog', (dialog) => dialog.accept())
   await page.getByRole('button', { name: 'Simpan Perubahan' }).click()
   await expect(page.getByText('Perubahan tersimpan. 1 nilai siswa dihitung ulang.')).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Judul Diubah' })).toBeVisible()
@@ -404,6 +405,7 @@ test.describe('answer key formats', () => {
 
     await page.getByLabel(/Kunci Pilihan Ganda/).fill('AB\nCD')
     await expect(page.getByRole('list', { name: 'Hasil bacaan Pilihan Ganda' }).getByRole('listitem')).toHaveText(['1A', '2B', '3C', '4D'])
+    page.once('dialog', (dialog) => dialog.accept())
     await page.getByRole('button', { name: 'Simpan Perubahan' }).click()
     await expect(page.getByText('Perubahan tersimpan. 1 nilai siswa dihitung ulang.')).toBeVisible()
     expect((await api.get(`/exams/${exam.id}`)).body.answer_key.pg.map((item) => item.answer)).toEqual(['A', 'B', 'C', 'D'])

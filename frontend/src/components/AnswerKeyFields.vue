@@ -1,6 +1,6 @@
 <script setup>
 import { computed } from 'vue'
-import { parseAnswers } from '../lib/answerKey.js'
+import { ANSWER_HELP, parseAnswers } from '../lib/answerKey.js'
 // Same rules as the server, so a letter marked here is the letter the server refuses
 import { rules } from '../../../lib/validate.js'
 
@@ -8,16 +8,16 @@ import { rules } from '../../../lib/validate.js'
 const props = defineProps({ form: { type: Object, required: true } })
 
 const SECTIONS = [
-  { key: 'pg', name: 'Pilihan Ganda', hint: 'Huruf A–E', fix: 'Pakai huruf A–E.', placeholder: 'Contoh: ABCDE' },
-  { key: 'bs', name: 'Benar/Salah', hint: 'B = Benar, S = Salah', fix: 'Pakai huruf B atau S.', placeholder: 'Contoh: BSBS' },
-  { key: 'mj', name: 'Menjodohkan', hint: 'Huruf A–K', fix: 'Pakai huruf A–K.', placeholder: 'Contoh: ABCK' }
+  { key: 'pg', name: 'Pilihan Ganda', hint: 'Huruf A–E', placeholder: 'Contoh: ABCDE' },
+  { key: 'bs', name: 'Benar/Salah', hint: 'B = Benar, S = Salah', placeholder: 'Contoh: BSBS' },
+  { key: 'mj', name: 'Menjodohkan', hint: 'Huruf A–K', placeholder: 'Contoh: ABCK' }
 ]
 
 // How each section is read, so a teacher sees the question numbers and wrong letters before saving
 const sections = computed(() =>
   SECTIONS.map((section) => {
     const items = parseAnswers(props.form[section.key]).map((answer, i) => ({ no: i + 1, answer, valid: rules[section.key].test(answer) }))
-    return { ...section, items, wrong: items.filter((item) => !item.valid).map((item) => item.no) }
+    return { ...section, fix: ANSWER_HELP[section.key], items, wrong: items.filter((item) => !item.valid).map((item) => item.no) }
   })
 )
 </script>

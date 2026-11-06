@@ -7,6 +7,9 @@
 const NUMBERING = /\d+\s*[.):-]?\s*(?=[a-zA-Z])/g
 const SEPARATORS = /[\s,;.:/|()]+/g
 
+// What each section accepts, for the messages next to a wrong letter
+export const ANSWER_HELP = { pg: 'Pakai huruf A–E.', bs: 'Pakai huruf B atau S.', mj: 'Pakai huruf A–K.' }
+
 export const parseAnswers = (text) => [...String(text ?? '').replace(NUMBERING, '').replace(SEPARATORS, '').toUpperCase()]
 
 const buildSection = (text) => parseAnswers(text).map((answer, index) => ({ no: index + 1, answer }))
