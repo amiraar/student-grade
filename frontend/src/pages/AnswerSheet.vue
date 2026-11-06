@@ -7,6 +7,7 @@ import { BUBBLE_RADIUS, ID_CELL, MARKERS, MARKER_SIZE, ORIENTATION_MARK, buildLa
 const route = useRoute()
 const exam = ref(null)
 const students = ref([])
+const studentsLoaded = ref(false)
 const perStudent = ref(route.query.student === 'all')
 
 const counts = computed(() => (exam.value ? countsFromKey(exam.value.answer_key) : null))
@@ -24,6 +25,7 @@ const load = async () => {
   exam.value = res.data
   const studentsRes = await api.get('/students', { params: { class_id: res.data.class_id, per_page: 200, sort: 'name', order: 'asc' } })
   students.value = studentsRes.data.data
+  studentsLoaded.value = true
 }
 
 onMounted(load)
@@ -40,7 +42,10 @@ onMounted(load)
         Satu lembar per siswa (nama dicetak, siswa dikenali otomatis saat difoto) — {{ students.length }} siswa
       </label>
       <p class="text-sm text-slate-600">Cetak di kertas A4 dengan skala 100% (Actual size). Jangan dilipat; keempat kotak hitam di pojok harus terlihat saat difoto.</p>
-      <button class="btn" :disabled="!layout.fits" @click="print">Cetak</button>
+      <p v-if="studentsLoaded && !pages.length" class="text-sm text-amber-700">
+        Kelas ini belum punya siswa. Tambah dulu di menu <RouterLink to="/students" class="font-semibold underline">Siswa</RouterLink>, atau hilangkan centang untuk mencetak satu lembar kosong.
+      </p>
+      <button class="btn" :disabled="!layout.fits || !pages.length" @click="print">Cetak</button>
     </div>
 
     <div v-for="student in pages" :key="student?.id ?? 'blank'" class="sheet">
