@@ -25,6 +25,8 @@ const classes = ref([])
 const classesLoaded = ref(false)
 const students = ref([])
 const exams = ref([])
+// False until the exams of the chosen class have arrived, so "no exams" is not said while loading
+const examsLoaded = ref(false)
 const exam = ref(null) // selected exam with answer key
 const results = ref({}) // student_id -> saved result
 const classId = ref('')
@@ -126,6 +128,7 @@ guardedWatch(classId, async () => {
   examId.value = ''
   students.value = []
   exams.value = []
+  examsLoaded.value = false
   if (!classId.value) return
   const [studentsRes, examsRes] = await Promise.all([
     api.get('/students', { params: { class_id: classId.value, per_page: 200, sort: 'name', order: 'asc' } }),
@@ -134,6 +137,7 @@ guardedWatch(classId, async () => {
   if (!isNewest()) return
   students.value = studentsRes.data.data
   exams.value = examsRes.data.data
+  examsLoaded.value = true
   if (linked.exam) {
     examId.value = linked.exam
     linked.exam = null
@@ -388,7 +392,7 @@ function nextStudent() {
           <option v-for="item in exams" :key="item.id" :value="item.id">{{ item.title }} · {{ item.exam_date }}</option>
         </select>
       </div>
-      <p v-if="classId && !exams.length" class="mt-2 text-sm text-amber-700">Kelas ini belum punya ujian. Buat ujian dulu di menu Ujian.</p>
+      <p v-if="classId && examsLoaded && !exams.length" class="mt-2 text-sm text-amber-700">Kelas ini belum punya ujian. Buat ujian dulu di menu Ujian.</p>
       <p v-if="errorMessage && !review" class="mt-2 text-sm text-red-600">{{ errorMessage }}</p>
 
       <div v-if="exam" class="mt-4 space-y-3">
