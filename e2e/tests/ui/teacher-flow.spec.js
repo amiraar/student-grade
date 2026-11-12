@@ -190,7 +190,8 @@ test.describe('a photo and a saved score', () => {
   async function photo(page, exam, student, marks) {
     await page.goto(`/exams/${exam.id}/sheet?student=all`)
     const sheet = page.locator('.sheet').filter({ hasText: student.name })
-    await expect(sheet).toBeVisible()
+    // The page waits for three requests in a row (session, exam, students) before drawing the sheets
+    await expect(sheet).toBeVisible(LINK_LOADED)
     const dots = buildLayout(countsFromKey(exam.answer_key)).sections.flatMap((section) =>
       section.questions.flatMap((question) => {
         const chosen = marks[section.key]?.[question.no - 1]
