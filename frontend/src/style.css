@@ -1,22 +1,26 @@
 @import url('https://fonts.googleapis.com/css2?family=Literata:wght@400;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
 @import 'tailwindcss';
 
+/* The palette, in one place. As theme colours they also work as classes (text-accent, border-ink/10). */
+@theme {
+  --color-ink: #111827;
+  --color-paper: #f7f3ea;
+  /* amber-700: white text on it reaches 4.73:1, above the 4.5:1 WCAG AA asks for */
+  --color-accent: #b45309;
+}
+
 @layer base {
   :root {
-    --ink: #111827;
-    --paper: #f7f3ea;
-    --accent: #d97706;
-    --accent-2: #0f766e;
     --card: #ffffff;
     --shadow: 0 30px 60px -40px rgba(17, 24, 39, 0.5);
   }
 
   body {
     font-family: 'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
-    color: var(--ink);
+    color: var(--color-ink);
     background: radial-gradient(circle at top left, #fef3c7, transparent 55%),
       radial-gradient(circle at 30% 20%, #ccfbf1, transparent 40%),
-      var(--paper);
+      var(--color-paper);
     min-height: 100vh;
     margin: 0;
   }
@@ -37,7 +41,7 @@
   .bg-ambient {
     background: radial-gradient(circle at top left, #fef3c7, transparent 55%),
       radial-gradient(circle at 30% 20%, #ccfbf1, transparent 40%),
-      var(--paper);
+      var(--color-paper);
   }
 
   .card {
@@ -49,20 +53,20 @@
 
   .btn {
     @apply inline-flex items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-semibold;
-    background: var(--accent);
+    background: var(--color-accent);
     color: #fff7ed;
     transition: transform 150ms ease, box-shadow 150ms ease;
   }
 
   .btn:hover {
     transform: translateY(-1px);
-    box-shadow: 0 16px 30px -20px rgba(217, 119, 6, 0.8);
+    box-shadow: 0 16px 30px -20px rgba(180, 83, 9, 0.8);
   }
 
   .btn-ghost {
     @apply inline-flex items-center justify-center rounded-full px-3 py-2 text-sm font-semibold;
     border: 1px solid rgba(15, 23, 42, 0.15);
-    color: var(--ink);
+    color: var(--color-ink);
     background: #fff;
   }
 
@@ -87,9 +91,10 @@
     color: rgba(15, 23, 42, 0.7);
   }
 
+  /* Solid accent: accent text on a light accent tint stays under 4.5:1 on the header */
   .nav-link.router-link-active {
-    background: rgba(217, 119, 6, 0.12);
-    color: var(--accent);
+    background: var(--color-accent);
+    color: #fff7ed;
   }
 
   .section-title {

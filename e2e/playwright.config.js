@@ -27,6 +27,8 @@ export default defineConfig({
   projects: [
     { name: 'api', testDir: './tests/api' },
     { name: 'desktop', testDir: './tests/ui', testIgnore: '**/mobile.spec.js', use: { ...devices['Desktop Chrome'] } },
-    { name: 'mobile', testDir: './tests/ui', testMatch: '**/mobile.spec.js', use: { ...devices['Pixel 7'] } }
+    { name: 'mobile', testDir: './tests/ui', testMatch: '**/mobile.spec.js', use: { ...devices['Pixel 7'] } },
+    // Many Android phones are 360px wide, narrower than the Pixel 7
+    { name: 'mobile-small', testDir: './tests/ui', testMatch: '**/mobile.spec.js', use: { ...devices['Pixel 7'], viewport: { width: 360, height: 740 } } }
   ]
 })

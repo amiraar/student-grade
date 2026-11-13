@@ -190,7 +190,8 @@ test.describe('a photo and a saved score', () => {
   async function photo(page, exam, student, marks) {
     await page.goto(`/exams/${exam.id}/sheet?student=all`)
     const sheet = page.locator('.sheet').filter({ hasText: student.name })
-    await expect(sheet).toBeVisible()
+    // The page waits for three requests in a row (session, exam, students) before drawing the sheets
+    await expect(sheet).toBeVisible(LINK_LOADED)
     const dots = buildLayout(countsFromKey(exam.answer_key)).sections.flatMap((section) =>
       section.questions.flatMap((question) => {
         const chosen = marks[section.key]?.[question.no - 1]
@@ -545,6 +546,31 @@ test.describe('guidance', () => {
     await page.getByRole('checkbox').uncheck()
     await expect(page.locator('.sheet')).toHaveCount(1)
     await expect(page.getByRole('button', { name: 'Cetak' })).toBeEnabled()
+  })
+
+  test('while the exams of a class load, grading does not say the class has none', async ({ page, request }) => {
+    const ctx = await twoStudents(request)
+    const empty = await createClass(ctx.api)
+    let release
+    const held = new Promise((resolve) => { release = resolve })
+    await page.route(/\/api\/exams\?/, async (route) => {
+      await held
+      await route.continue()
+    })
+    await loginAs(page, ctx.token)
+    await page.goto('/grade')
+
+    const noExams = page.getByText('Kelas ini belum punya ujian')
+    await selectWithOption(page, '1. Pilih kelas').selectOption({ label: ctx.klass.name })
+    await expect(selectWithOption(page, '2. Pilih ujian')).toBeEnabled()
+    await expect(noExams).toBeHidden()
+
+    release()
+    await expect(selectWithOption(page, '2. Pilih ujian').locator('option', { hasText: ctx.exam.title })).toHaveCount(1)
+    await expect(noExams).toBeHidden()
+
+    await selectWithOption(page, '1. Pilih kelas').selectOption({ label: empty.name })
+    await expect(noExams).toBeVisible()
   })
 
   test('grade boundaries are shown', async ({ page, request }) => {

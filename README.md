@@ -62,6 +62,8 @@ Tambahkan di Vercel Dashboard -> Project -> Settings -> Environment Variables:
 Frontend (build-time):
 - `VITE_API_BASE_URL=/api`
 
+Batas percobaan (login 10 per 10 menit, registrasi 5 per 10 menit, koreksi 120 per menit, per IP) disimpan di memori tiap instance Vercel Functions, jadi berlaku per instance, bukan global.
+
 ## Neon Database Setup
 1. Buat project di Neon.
 2. Copy connection string ke `DATABASE_URL`.

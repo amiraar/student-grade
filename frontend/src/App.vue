@@ -26,7 +26,7 @@ const links = [
         <div class="flex min-w-0 items-center gap-3">
           <div class="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-slate-900 text-lg font-semibold text-white">SG</div>
           <div class="min-w-0">
-            <p class="text-xs uppercase tracking-[0.3em] text-slate-500">Student Grade</p>
+            <p class="text-xs uppercase tracking-[0.3em] text-slate-600">Student Grade</p>
             <p class="hidden font-serif text-lg sm:block">Manajemen Nilai & Koreksi</p>
           </div>
         </div>
@@ -34,7 +34,7 @@ const links = [
           <RouterLink v-for="link in links" :key="link.to" :to="link.to" class="nav-link">{{ link.label }}</RouterLink>
         </nav>
         <div v-if="!isAuthPage" class="flex shrink-0 items-center gap-3">
-          <div class="hidden text-right text-xs text-slate-500 md:block">
+          <div class="hidden text-right text-xs text-slate-600 md:block">
             <p class="font-medium text-slate-900">{{ auth.user?.name || 'Guru' }}</p>
             <p>{{ auth.user?.email || '-' }}</p>
           </div>
