@@ -1,6 +1,9 @@
 import { test, expect, downloadText, loginAs, selectWithOption } from './fixtures.js'
 import { createClass, createExam, createStudent, newTeacher, scenario, answers, uid } from '../helpers.js'
 
+// Saving a new key recalculates saved scores one by one: locally that save alone takes about 2 seconds
+const REGRADED = { timeout: 15_000 }
+
 test('dashboard counts and recent exams come from the API', async ({ page, request }) => {
   const { api, token } = await newTeacher(request)
   const klass = await createClass(api)
@@ -245,7 +248,7 @@ test('exam detail: editing the key recalculates saved scores and says how many',
   await page.getByLabel(/Kunci Pilihan Ganda/).fill('A, B, C, D, A')
   page.once('dialog', (dialog) => dialog.accept())
   await page.getByRole('button', { name: 'Simpan Perubahan' }).click()
-  await expect(page.getByText('Perubahan tersimpan. 1 nilai siswa dihitung ulang.')).toBeVisible()
+  await expect(page.getByText('Perubahan tersimpan. 1 nilai siswa dihitung ulang.')).toBeVisible(REGRADED)
   await expect(page.getByRole('heading', { name: 'Judul Diubah' })).toBeVisible()
 
   await page.getByRole('link', { name: 'Lihat Hasil' }).click()
@@ -407,7 +410,7 @@ test.describe('answer key formats', () => {
     await expect(page.getByRole('list', { name: 'Hasil bacaan Pilihan Ganda' }).getByRole('listitem')).toHaveText(['1A', '2B', '3C', '4D'])
     page.once('dialog', (dialog) => dialog.accept())
     await page.getByRole('button', { name: 'Simpan Perubahan' }).click()
-    await expect(page.getByText('Perubahan tersimpan. 1 nilai siswa dihitung ulang.')).toBeVisible()
+    await expect(page.getByText('Perubahan tersimpan. 1 nilai siswa dihitung ulang.')).toBeVisible(REGRADED)
     expect((await api.get(`/exams/${exam.id}`)).body.answer_key.pg.map((item) => item.answer)).toEqual(['A', 'B', 'C', 'D'])
     expect((await api.get(`/exams/${exam.id}/results`)).body.data[0].score).toBe('25.00')
   })
